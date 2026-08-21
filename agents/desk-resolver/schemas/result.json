@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reply_markdown", "requests", "questions", "operator_note", "suggested_policy_note"],
+  "properties": {
+    "reply_markdown": {"type": "string"},
+    "requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["request_no", "outcome", "rule_refs"],
+        "properties": {
+          "request_no": {"type": "integer"},
+          "outcome": {"type": "string"},
+          "rule_refs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "questions": {"type": "array", "items": {"type": "string"}},
+    "operator_note": {"type": ["string", "null"]},
+    "suggested_policy_note": {"type": ["string", "null"]}
+  }
+}

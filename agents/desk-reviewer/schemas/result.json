@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "findings", "unsupported_claims"],
+  "properties": {
+    "verdict": {"type": "string", "enum": ["pass", "revise"]},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_ref", "problem", "suggestion"],
+        "properties": {
+          "rule_ref": {"type": "string"},
+          "problem": {"type": "string"},
+          "suggestion": {"type": "string"}
+        }
+      }
+    },
+    "unsupported_claims": {"type": "array", "items": {"type": "string"}}
+  }
+}

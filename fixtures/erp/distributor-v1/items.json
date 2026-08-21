@@ -1,0 +1,218 @@
+[
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-001",
+    "item_name": "Synthetic corrugated box, small",
+    "name": "SYN-ITEM-001",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-002",
+    "item_name": "Synthetic corrugated box, medium",
+    "name": "SYN-ITEM-002",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-003",
+    "item_name": "Synthetic corrugated box, large",
+    "name": "SYN-ITEM-003",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-004",
+    "item_name": "Synthetic packing tape, 48 mm",
+    "name": "SYN-ITEM-004",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-005",
+    "item_name": "Synthetic stretch wrap roll",
+    "name": "SYN-ITEM-005",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-006",
+    "item_name": "Synthetic pallet, standard",
+    "name": "SYN-ITEM-006",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-007",
+    "item_name": "Synthetic pallet, heavy duty",
+    "name": "SYN-ITEM-007",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-008",
+    "item_name": "Synthetic bubble wrap roll",
+    "name": "SYN-ITEM-008",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-009",
+    "item_name": "Synthetic shipping label pack",
+    "name": "SYN-ITEM-009",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-010",
+    "item_name": "Synthetic void fill paper",
+    "name": "SYN-ITEM-010",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 0,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-011",
+    "item_name": "Synthetic storage crate, large",
+    "name": "SYN-ITEM-011",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  },
+  {
+    "disabled": 1,
+    "is_stock_item": 1,
+    "item_code": "SYN-ITEM-012",
+    "item_name": "Synthetic tote, discontinued",
+    "name": "SYN-ITEM-012",
+    "stock_uom": "Nos",
+    "uoms": [
+      {
+        "conversion_factor": "1",
+        "uom": "Nos"
+      },
+      {
+        "conversion_factor": "20",
+        "uom": "Box"
+      }
+    ]
+  }
+]

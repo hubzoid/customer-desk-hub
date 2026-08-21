@@ -1,0 +1,227 @@
+[
+  {
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-001",
+    "docstatus": 1,
+    "due_date": "2000-01-19",
+    "grand_total": "1250.00",
+    "is_return": 0,
+    "items": [
+      {
+        "amount": "1250.00",
+        "item_code": "SYN-ITEM-002",
+        "item_name": "Synthetic corrugated box, medium",
+        "name": "SI1-1",
+        "qty": "500",
+        "rate": "2.50",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SINV-0001",
+    "outstanding_amount": "1250.00",
+    "po_no": "SYN-PO-H-0990",
+    "posting_date": "1999-12-20",
+    "status": "Unpaid",
+    "total": "1250.00"
+  },
+  {
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-001",
+    "docstatus": 1,
+    "due_date": "2000-02-07",
+    "grand_total": "580.00",
+    "is_return": 0,
+    "items": [
+      {
+        "amount": "580.00",
+        "item_code": "SYN-ITEM-006",
+        "item_name": "Synthetic pallet, standard",
+        "name": "SI2-1",
+        "qty": "40",
+        "rate": "14.50",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SINV-0002",
+    "outstanding_amount": "0.00",
+    "po_no": "SYN-PO-H-0998",
+    "posting_date": "2000-01-08",
+    "status": "Paid",
+    "total": "580.00"
+  },
+  {
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-002",
+    "docstatus": 1,
+    "due_date": "1999-12-20",
+    "grand_total": "960.00",
+    "is_return": 0,
+    "items": [
+      {
+        "amount": "960.00",
+        "item_code": "SYN-ITEM-005",
+        "item_name": "Synthetic stretch wrap roll",
+        "name": "SI3-1",
+        "qty": "60",
+        "rate": "16.00",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SINV-0003",
+    "outstanding_amount": "0.00",
+    "po_no": "SYN-PO-L-480",
+    "posting_date": "1999-11-20",
+    "status": "Paid",
+    "total": "960.00"
+  },
+  {
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-002",
+    "docstatus": 1,
+    "due_date": "2000-02-04",
+    "grand_total": "815.00",
+    "is_return": 0,
+    "items": [
+      {
+        "amount": "555.00",
+        "item_code": "SYN-ITEM-002",
+        "item_name": "Synthetic corrugated box, medium",
+        "name": "SI4-1",
+        "qty": "300",
+        "rate": "1.85",
+        "uom": "Nos"
+      },
+      {
+        "amount": "260.00",
+        "item_code": "SYN-ITEM-008",
+        "item_name": "Synthetic bubble wrap roll",
+        "name": "SI4-2",
+        "qty": "10",
+        "rate": "26.00",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SINV-0004",
+    "outstanding_amount": "815.00",
+    "po_no": "SYN-PO-L-501",
+    "posting_date": "2000-01-05",
+    "status": "Unpaid",
+    "total": "815.00"
+  },
+  {
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-003",
+    "docstatus": 1,
+    "due_date": "2000-02-11",
+    "grand_total": "300.00",
+    "is_return": 0,
+    "items": [
+      {
+        "amount": "300.00",
+        "item_code": "SYN-ITEM-004",
+        "item_name": "Synthetic packing tape, 48 mm",
+        "name": "SI5-1",
+        "qty": "100",
+        "rate": "3.00",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SINV-0005",
+    "outstanding_amount": "300.00",
+    "po_no": "SYN-PO-S-70",
+    "posting_date": "2000-01-12",
+    "status": "Unpaid",
+    "total": "300.00"
+  },
+  {
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-001",
+    "docstatus": 1,
+    "due_date": "2000-01-02",
+    "grand_total": "-100.00",
+    "is_return": 1,
+    "items": [
+      {
+        "amount": "-100.00",
+        "item_code": "SYN-ITEM-002",
+        "item_name": "Synthetic corrugated box, medium",
+        "name": "SI6-1",
+        "qty": "-40",
+        "rate": "2.50",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SINV-0006",
+    "outstanding_amount": "-100.00",
+    "po_no": "SYN-PO-H-0990",
+    "posting_date": "2000-01-02",
+    "status": "Return",
+    "total": "-100.00"
+  },
+  {
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-003",
+    "docstatus": 2,
+    "due_date": "2000-02-02",
+    "grand_total": "75.00",
+    "is_return": 0,
+    "items": [
+      {
+        "amount": "75.00",
+        "item_code": "SYN-ITEM-009",
+        "item_name": "Synthetic shipping label pack",
+        "name": "SI7-1",
+        "qty": "8",
+        "rate": "9.375",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SINV-0007",
+    "outstanding_amount": "0.00",
+    "po_no": "SYN-PO-S-66",
+    "posting_date": "2000-01-03",
+    "status": "Cancelled",
+    "total": "75.00"
+  },
+  {
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-001",
+    "docstatus": 0,
+    "due_date": "2000-02-13",
+    "grand_total": "480.00",
+    "is_return": 0,
+    "items": [
+      {
+        "amount": "480.00",
+        "item_code": "SYN-ITEM-001",
+        "item_name": "Synthetic corrugated box, small",
+        "name": "SI8-1",
+        "qty": "400",
+        "rate": "1.20",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SINV-0008",
+    "outstanding_amount": "480.00",
+    "po_no": "SYN-PO-H-1001",
+    "posting_date": "2000-01-14",
+    "status": "Draft",
+    "total": "480.00"
+  }
+]

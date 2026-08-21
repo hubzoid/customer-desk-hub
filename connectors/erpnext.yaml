@@ -1,0 +1,13 @@
+version: 1
+backend: sample
+dataset: distributor-v1
+site_url: null
+credential_ref: null
+company: Synthetic Meridian Distribution
+currency: USD
+warehouses: [SYN-MAIN]
+selling_price_list: SYN-RETAIL
+writes_enabled: false
+timeout_seconds: 20
+read_attempts: 3
+page_size: 50

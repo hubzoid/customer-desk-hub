@@ -1,0 +1,8 @@
+company,channel_kind,sender,customer_id,source_ref
+Synthetic Meridian Distribution,email,buyer.one@synthetic-harbor.example,SYN-CUST-001,erp-contact:SYN-CONT-0001
+Synthetic Meridian Distribution,email,accounts@synthetic-harbor.example,SYN-CUST-001,erp-contact:SYN-CONT-0002
+Synthetic Meridian Distribution,email,orders@synthetic-lakeside.example,SYN-CUST-002,erp-contact:SYN-CONT-0003
+Synthetic Meridian Distribution,whatsapp,+15550100102,SYN-CUST-002,erp-contact:SYN-CONT-0003
+Synthetic Meridian Distribution,email,desk@synthetic-summit.example,SYN-CUST-003,erp-contact:SYN-CONT-0004
+Synthetic Meridian Distribution,whatsapp,+15550100103,SYN-CUST-003,erp-contact:SYN-CONT-0004
+Synthetic Meridian Distribution,email,office@synthetic-oldmill.example,SYN-CUST-004,erp-contact:SYN-CONT-0005

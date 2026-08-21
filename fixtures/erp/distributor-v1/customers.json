@@ -1,0 +1,30 @@
+[
+  {
+    "customer_name": "Synthetic Harbor Retail",
+    "default_currency": "USD",
+    "default_price_list": "SYN-RETAIL",
+    "disabled": 0,
+    "name": "SYN-CUST-001"
+  },
+  {
+    "customer_name": "Synthetic Lakeside Foods",
+    "default_currency": "USD",
+    "default_price_list": "SYN-RETAIL",
+    "disabled": 0,
+    "name": "SYN-CUST-002"
+  },
+  {
+    "customer_name": "Synthetic Summit Hardware",
+    "default_currency": "USD",
+    "default_price_list": "SYN-WHOLESALE",
+    "disabled": 0,
+    "name": "SYN-CUST-003"
+  },
+  {
+    "customer_name": "Synthetic Old Mill Traders",
+    "default_currency": "USD",
+    "default_price_list": "SYN-RETAIL",
+    "disabled": 1,
+    "name": "SYN-CUST-004"
+  }
+]

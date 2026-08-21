@@ -1,0 +1,27 @@
+{
+  "clock": "2000-01-15T10:00:00Z",
+  "company": "Synthetic Meridian Distribution",
+  "currency": "USD",
+  "dataset": "distributor-v1",
+  "files": {
+    "availability.json": "sha256:4fa751077722c5b8d23c51bb5c4388eea2d9830cba35116e8fcc85596aa8e055",
+    "contacts.json": "sha256:524309d75491bb4d79be483039635a51eb39609fe0d5d3f129c5b4e85bf7e5a1",
+    "customers.json": "sha256:42824e5a7dbd9460181b3c4a765699502da9fed73fbee5b952cbfdf65d67f9ce",
+    "items.json": "sha256:0a2f216b2a5bd443490f28fd1874bb9f1f1d97c8eff802c4a3d8bf6a7a09aa83",
+    "prices.json": "sha256:a907505a49b1828ead400fa4883bc0b53866af61f2b21511c9ad3bd2300e2549",
+    "sales_invoices.json": "sha256:d85703b005b7b0d01b5e5882194b626ad03581e5df2721e5ed96c09127f86996",
+    "sales_orders.json": "sha256:2d2e06c8e1e5fd5aea3e22060c8208c908104f0a8ffe2a0323c57a6f8ea7022f"
+  },
+  "note": "Interim Customer Desk fixtures built to the HUB-108 contract. They are replaced by the vendored canonical distributor-v1 dataset from the Order & Invoice Desk when it lands.",
+  "seed": 108,
+  "selling_price_lists": [
+    "SYN-RETAIL",
+    "SYN-WHOLESALE"
+  ],
+  "synthetic": true,
+  "variant": "customer-desk-interim",
+  "version": 1,
+  "warehouses": [
+    "SYN-MAIN"
+  ]
+}

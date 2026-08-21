@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["categories", "escalation_flags", "unsure", "reason"],
+  "properties": {
+    "categories": {"type": "array", "items": {"type": "string", "enum": ["order_status", "invoice_copy", "account_statement", "price_availability", "delivery_change", "complaint", "other"]}},
+    "escalation_flags": {"type": "array", "items": {"type": "string", "enum": ["legal_threat", "safety_issue", "personal_data_request", "other_customer_data"]}},
+    "unsure": {"type": "boolean"},
+    "reason": {"type": "string"}
+  }
+}

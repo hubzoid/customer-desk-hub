@@ -1,0 +1,37 @@
+[
+  {
+    "customer": "SYN-CUST-001",
+    "display_name": "Synthetic Avery",
+    "email": "buyer.one@synthetic-harbor.example",
+    "name": "SYN-CONT-0001",
+    "phone": null
+  },
+  {
+    "customer": "SYN-CUST-001",
+    "display_name": "Synthetic Harbor Accounts",
+    "email": "accounts@synthetic-harbor.example",
+    "name": "SYN-CONT-0002",
+    "phone": null
+  },
+  {
+    "customer": "SYN-CUST-002",
+    "display_name": "Synthetic Blake",
+    "email": "orders@synthetic-lakeside.example",
+    "name": "SYN-CONT-0003",
+    "phone": "+15550100102"
+  },
+  {
+    "customer": "SYN-CUST-003",
+    "display_name": "Synthetic Casey",
+    "email": "desk@synthetic-summit.example",
+    "name": "SYN-CONT-0004",
+    "phone": "+15550100103"
+  },
+  {
+    "customer": "SYN-CUST-004",
+    "display_name": "Synthetic Drew",
+    "email": "office@synthetic-oldmill.example",
+    "name": "SYN-CONT-0005",
+    "phone": null
+  }
+]

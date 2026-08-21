@@ -1,0 +1,232 @@
+[
+  {
+    "billing_status": "Not Billed",
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-001",
+    "delivery_date": "2000-01-20",
+    "delivery_status": "Not Delivered",
+    "docstatus": 1,
+    "grand_total": "684.00",
+    "items": [
+      {
+        "amount": "480.00",
+        "delivered_qty": "0",
+        "delivery_date": "2000-01-20",
+        "item_code": "SYN-ITEM-001",
+        "item_name": "Synthetic corrugated box, small",
+        "name": "SO1-1",
+        "qty": "400",
+        "rate": "1.20",
+        "uom": "Nos"
+      },
+      {
+        "amount": "204.00",
+        "delivered_qty": "0",
+        "delivery_date": "2000-01-20",
+        "item_code": "SYN-ITEM-004",
+        "item_name": "Synthetic packing tape, 48 mm",
+        "name": "SO1-2",
+        "qty": "60",
+        "rate": "3.40",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SO-0001",
+    "per_billed": "0.0",
+    "per_delivered": "0.0",
+    "po_no": "SYN-PO-H-1001",
+    "status": "To Deliver and Bill",
+    "total": "684.00",
+    "transaction_date": "2000-01-05"
+  },
+  {
+    "billing_status": "Not Billed",
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-001",
+    "delivery_date": "2000-01-10",
+    "delivery_status": "Partly Delivered",
+    "docstatus": 1,
+    "grand_total": "940.00",
+    "items": [
+      {
+        "amount": "580.00",
+        "delivered_qty": "40",
+        "delivery_date": "2000-01-10",
+        "item_code": "SYN-ITEM-006",
+        "item_name": "Synthetic pallet, standard",
+        "name": "SO2-1",
+        "qty": "40",
+        "rate": "14.50",
+        "uom": "Nos"
+      },
+      {
+        "amount": "360.00",
+        "delivered_qty": "0",
+        "delivery_date": "2000-01-10",
+        "item_code": "SYN-ITEM-005",
+        "item_name": "Synthetic stretch wrap roll",
+        "name": "SO2-2",
+        "qty": "20",
+        "rate": "18.00",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SO-0002",
+    "per_billed": "0.0",
+    "per_delivered": "66.7",
+    "po_no": "SYN-PO-H-0998",
+    "status": "To Deliver and Bill",
+    "total": "940.00",
+    "transaction_date": "1999-12-28"
+  },
+  {
+    "billing_status": "Fully Billed",
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-002",
+    "delivery_date": "2000-01-05",
+    "delivery_status": "Fully Delivered",
+    "docstatus": 1,
+    "grand_total": "815.00",
+    "items": [
+      {
+        "amount": "555.00",
+        "delivered_qty": "300",
+        "delivery_date": "2000-01-05",
+        "item_code": "SYN-ITEM-002",
+        "item_name": "Synthetic corrugated box, medium",
+        "name": "SO3-1",
+        "qty": "300",
+        "rate": "1.85",
+        "uom": "Nos"
+      },
+      {
+        "amount": "260.00",
+        "delivered_qty": "10",
+        "delivery_date": "2000-01-05",
+        "item_code": "SYN-ITEM-008",
+        "item_name": "Synthetic bubble wrap roll",
+        "name": "SO3-2",
+        "qty": "10",
+        "rate": "26.00",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SO-0003",
+    "per_billed": "100.0",
+    "per_delivered": "100.0",
+    "po_no": "SYN-PO-L-501",
+    "status": "Completed",
+    "total": "815.00",
+    "transaction_date": "1999-12-20"
+  },
+  {
+    "billing_status": "Not Billed",
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-002",
+    "delivery_date": "2000-01-22",
+    "delivery_status": "Not Delivered",
+    "docstatus": 1,
+    "grand_total": "1020.00",
+    "items": [
+      {
+        "amount": "1020.00",
+        "delivered_qty": "0",
+        "delivery_date": "2000-01-22",
+        "item_code": "SYN-ITEM-007",
+        "item_name": "Synthetic pallet, heavy duty",
+        "name": "SO4-1",
+        "qty": "50",
+        "rate": "20.40",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SO-0004",
+    "per_billed": "0.0",
+    "per_delivered": "0.0",
+    "po_no": "SYN-PO-L-517",
+    "status": "To Deliver and Bill",
+    "total": "1020.00",
+    "transaction_date": "2000-01-10"
+  },
+  {
+    "billing_status": "Not Billed",
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-003",
+    "delivery_date": "2000-01-25",
+    "delivery_status": "Not Delivered",
+    "docstatus": 1,
+    "grand_total": "682.00",
+    "items": [
+      {
+        "amount": "450.00",
+        "delivered_qty": "0",
+        "delivery_date": "2000-01-25",
+        "item_code": "SYN-ITEM-003",
+        "item_name": "Synthetic corrugated box, large",
+        "name": "SO5-1",
+        "qty": "200",
+        "rate": "2.25",
+        "uom": "Nos"
+      },
+      {
+        "amount": "232.00",
+        "delivered_qty": "0",
+        "delivery_date": "2000-01-25",
+        "item_code": "SYN-ITEM-011",
+        "item_name": "Synthetic storage crate, large",
+        "name": "SO5-2",
+        "qty": "8",
+        "rate": "29.00",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SO-0005",
+    "per_billed": "0.0",
+    "per_delivered": "0.0",
+    "po_no": "SYN-PO-S-77",
+    "status": "To Deliver and Bill",
+    "total": "682.00",
+    "transaction_date": "2000-01-11"
+  },
+  {
+    "billing_status": "Not Billed",
+    "company": "Synthetic Meridian Distribution",
+    "currency": "USD",
+    "customer": "SYN-CUST-003",
+    "delivery_date": "2000-01-31",
+    "delivery_status": "Not Delivered",
+    "docstatus": 0,
+    "grand_total": "105.00",
+    "items": [
+      {
+        "amount": "105.00",
+        "delivered_qty": "0",
+        "delivery_date": "2000-01-31",
+        "item_code": "SYN-ITEM-001",
+        "item_name": "Synthetic corrugated box, small",
+        "name": "SO6-1",
+        "qty": "100",
+        "rate": "1.05",
+        "uom": "Nos"
+      }
+    ],
+    "modified": "2000-01-14T18:00:00Z",
+    "name": "SYN-SO-0006",
+    "per_billed": "0.0",
+    "per_delivered": "0.0",
+    "po_no": "SYN-PO-S-80",
+    "status": "Draft",
+    "total": "105.00",
+    "transaction_date": "2000-01-14"
+  }
+]

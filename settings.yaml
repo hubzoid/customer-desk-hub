@@ -1,0 +1,113 @@
+version: 1
+settings:
+  - name: DESK_MODE
+    description: "sample reads the synthetic ERP and sends only to the sample outbox. live reads your ERPNext and uses your channels."
+    enum: [sample, live]
+    default: sample
+  - name: DESK_COMPANY
+    description: The exact ERPNext company name. Must equal company in connectors/erpnext.yaml.
+    required: true
+    example: Synthetic Meridian Distribution
+  - name: DESK_CLOCK
+    description: "dataset uses the sample dataset's fixed clock so sample dates resolve the same way every run. system uses the real UTC clock. Live mode needs system."
+    enum: [dataset, system]
+    default: dataset
+  - name: DESK_POLICY_FILE
+    default: knowledge/desk-policy.md
+  - name: DESK_STYLE_FILE
+    default: knowledge/customer-messages.md
+  - name: DESK_KINDS_FILE
+    default: knowledge/request-kinds.md
+  - name: DESK_EXTERNAL_CHANNELS
+    description: Channel ids (email, WhatsApp, sample) whose messages become customer cases.
+    type: string_list
+    default: [sample-email, sample-whatsapp]
+  - name: DESK_INTERNAL_SURFACES
+    description: Internal ways teammates open cases. Any of chat, transcript, slack.
+    type: string_list
+    default: [chat, transcript]
+  - name: DESK_SLACK_CHANNELS
+    description: Slack channel ids whose threads open internal cases. Needed when slack is listed above.
+    type: string_list
+    default: []
+  - name: DESK_INTAKE_ENABLED
+    description: false keeps new messages waiting without creating cases.
+    type: boolean
+    default: true
+  - name: DESK_INVOICE_PRINT_FORMAT
+    description: The ERPNext print format used for invoice copies.
+    default: Standard
+  - name: DESK_MAX_REQUESTS_PER_CASE
+    type: integer
+    minimum: 1
+    maximum: 5
+    default: 5
+  - name: DESK_REOPEN_DAYS
+    type: integer
+    minimum: 1
+    maximum: 90
+    default: 14
+  - name: DESK_RESPONSE_TARGET_HOURS
+    description: Highlights queue age only.
+    type: integer
+    minimum: 1
+    maximum: 168
+    default: 8
+  - name: DESK_CASE_PREFIX
+    regex: '^[A-Z]{2,6}$'
+    default: CD
+  - name: DESK_TICKET_PREFIX
+    regex: '^[A-Z]{2,6}$'
+    default: TKT
+  - name: DESK_SECOND_OPINION_BELOW
+    description: Ask the second-opinion station when the classifier's confidence is below this.
+    type: number
+    minimum: 0
+    maximum: 1
+    default: 0.75
+  - name: DESK_HELPDESK
+    description: "none, or zoho_desk to take tickets in from Zoho Desk and write tags, a private note and an unsent draft back."
+    enum: [none, zoho_desk]
+    default: none
+  - name: DESK_HELPDESK_MODE
+    description: "dry-run records intended helpdesk writes only. shadow writes tags with a shadow prefix and keeps drafts as previews. live writes."
+    enum: [dry-run, shadow, live]
+    default: dry-run
+  - name: DESK_HELPDESK_DRAFTS
+    description: The second switch for unsent draft replies in the helpdesk, on top of live mode.
+    type: boolean
+    default: false
+  - name: ZOHO_DESK_API_BASE
+    description: "Your Zoho Desk data centre, for example https://desk.zoho.com/api/v1 or https://desk.zoho.eu/api/v1."
+    default: https://desk.zoho.com/api/v1
+  - name: ZOHO_DESK_ACCOUNTS_BASE
+    default: https://accounts.zoho.com
+  - name: ZOHO_DESK_ORG_ID
+    description: Your Zoho Desk organization id. Found automatically when empty.
+    default: ""
+  - name: ZOHO_DESK_DEPARTMENT_ID
+    description: Only tickets in this department become cases. Empty means every department.
+    default: ""
+  - name: ZOHO_DESK_FROM_ADDRESS
+    description: The support address unsent drafts are prepared from.
+    default: ""
+  - name: ZOHO_DESK_TAG_PREFIX
+    regex: '^[a-z][a-z0-9-]{1,20}-$'
+    default: desk-
+  - name: ZOHO_DESK_CASE_FIELD
+    description: Optional API name of a ticket custom field that receives the desk case number, for example cf_desk_case.
+    default: ""
+  - name: ZOHO_DESK_CLIENT_ID
+    secret: true
+    description: Read-only Zoho Desk self client.
+  - name: ZOHO_DESK_CLIENT_SECRET
+    secret: true
+  - name: ZOHO_DESK_REFRESH_TOKEN
+    secret: true
+  - name: ZOHO_DESK_WRITE_CLIENT_ID
+    secret: true
+    description: A separate self client used only for tags, private notes, the case field and unsent drafts.
+  - name: ZOHO_DESK_WRITE_CLIENT_SECRET
+    secret: true
+  - name: ZOHO_DESK_WRITE_REFRESH_TOKEN
+    secret: true

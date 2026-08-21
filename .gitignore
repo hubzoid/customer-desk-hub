@@ -1,0 +1,13 @@
+.venv/
+.venv-install.log
+.env
+.hubzoid/
+.inbound/
+output/
+logs/
+__pycache__/
+*.pyc
+.pytest_cache/
+/data/
+/sample-outbox/
+/var/
