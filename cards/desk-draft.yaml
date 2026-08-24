@@ -1,0 +1,9 @@
+version: 1
+id: desk-draft
+title: Reply draft
+binding:
+  tool: desk_save_draft
+resource:
+  builtin: progress
+visibility: [model, app]
+allowed_tools: []

@@ -25,6 +25,9 @@ THREAD_CHARS = 12000
 class Runner:
     """How a stage runs. The workflow binds this to Hubzoid; tests bind it locally."""
 
+    item_id: str | None = None
+    label: str | None = None        # "scripted" when the stations are stand-ins
+
     def checkpoint(self, stage: str, fn):
         return fn()
 
@@ -172,8 +175,20 @@ def _outcome_lines(outcomes: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _filled(loaded: Loaded, sender: str, outcomes: list[dict]) -> str:
+    """What the desk itself adds, so neither station mistakes it for an unsupported claim."""
+    atts = [a["name"] for o in outcomes for a in o["attachments"]]
+    lines = [f"- [[sender_name]] is filled with the sender's display name from the verified channel: {sender}",
+             f"- The signature comes from the policy: {loaded.policy.data['reply']['signature']}",
+             "- [[observed]] is filled with the date the facts were read"]
+    if atts:
+        lines.append("- These files are attached by the desk, already checked: " + ", ".join(atts)
+                     + ". Invoice PDFs are the official ERPNext print.")
+    return "What the desk fills in or attaches itself:\n" + "\n".join(lines)
+
+
 def resolver_message(loaded: Loaded, today: str, thread: str, outcomes: list[dict], sheet: list[dict], *,
-                     findings: list[str], instruction: str | None, classification: dict) -> str:
+                     findings: list[str], instruction: str | None, classification: dict, sender: str = "") -> str:
     pol = loaded.policy
     rules = "\n".join(f"[{k}] {v}" for k, v in pol.rules.items())
     never = ", ".join(pol.data["reply"]["never_say"]) or "none"
@@ -182,7 +197,8 @@ def resolver_message(loaded: Loaded, today: str, thread: str, outcomes: list[dic
            f"Reply style:\n{loaded.style.prompt()}\n\nToday's date for the desk: {today}\n"
            f"Customer language: {classification.get('language', 'en')}\n\n"
            f"Requests and decided outcomes:\n{_outcome_lines(outcomes)}\n\n"
-           f"Fact sheet:\n{facts_lib.prompt_table(sheet)}\n\n<customer_message>\n{thread}\n</customer_message>")
+           f"Fact sheet:\n{facts_lib.prompt_table(sheet)}\n\n{_filled(loaded, sender, outcomes)}\n\n"
+           f"<customer_message>\n{thread}\n</customer_message>")
     if classification.get("needs_clarification") and classification.get("questions"):
         out += "\n\nThe classifier could not tell some of what was asked. Ask: " + " ".join(classification["questions"])
     if instruction:
@@ -193,12 +209,15 @@ def resolver_message(loaded: Loaded, today: str, thread: str, outcomes: list[dic
     return out
 
 
-def reviewer_message(loaded: Loaded, thread: str, outcomes: list[dict], sheet: list[dict], rendered: str) -> str:
+def reviewer_message(loaded: Loaded, thread: str, outcomes: list[dict], sheet: list[dict], rendered: str,
+                     sender: str = "") -> str:
     rules = "\n".join(f"[{k}] {v}" for k, v in loaded.policy.rules.items())
     never = ", ".join(loaded.policy.data["reply"]["never_say"]) or "none"
     return (f"Policy rules:\n{rules}\n\nForbidden phrases: {never}\n\n"
+            f"Reply style:\n{loaded.style.prompt()}\n\n"
             f"Requests and decided outcomes:\n{_outcome_lines(outcomes)}\n\n"
-            f"Fact sheet:\n{facts_lib.prompt_table(sheet)}\n\n<customer_message>\n{thread}\n</customer_message>\n\n"
+            f"Fact sheet:\n{facts_lib.prompt_table(sheet)}\n\n{_filled(loaded, sender, outcomes)}\n\n"
+            f"<customer_message>\n{thread}\n</customer_message>\n\n"
             f"<proposed_reply>\n{rendered}\n</proposed_reply>")
 
 
@@ -338,6 +357,10 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
         with store.tx(hub_dir) as tconn:
             r = store.next_resolution(tconn, case_id)
             store.update_case(tconn, case_id, state="triaging")
+            if runner.item_id:
+                # Lets the resolver's read tools find this case from trusted work item context.
+                tconn.execute("INSERT OR REPLACE INTO item_cases(work_item_id, case_id, resolution) VALUES (?,?,?)",
+                              (runner.item_id, case_id, r))
         return {"revision": r, "today": config.today(hub_dir, values).isoformat()}
 
     opened = runner.checkpoint(f"open-{trigger}", open_stage)
@@ -422,6 +445,9 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
         language = loaded.policy.data["reply"]["default_language"]
 
     def evaluate(source: str, resolver_out: dict | None, author_kind: str) -> dict:
+        nonlocal sheet, by_id
+        sheet = store.get_facts(store.connect(hub_dir), case_id, rev) or sheet
+        by_id = {f["fact_id"]: f for f in sheet}
         try:
             rendered = render.render(source, by_id, sender_name=sender, observed=observed, strict=False)
         except render.RenderError:  # pragma: no cover - strict=False never raises
@@ -450,7 +476,7 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
                 resolver_out = runner.station("desk-resolver", stage="resolve", revision=rev * 10 + k,
                                               message=resolver_message(loaded, today, thread, outcomes, sheet,
                                                                        findings=findings, instruction=instruction,
-                                                                       classification=classification))
+                                                                       classification=classification, sender=sender))
             except StationFailed as exc:
                 findings.append(f"The resolver could not run: {exc.message}")
                 break
@@ -466,7 +492,8 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
                 continue
             try:
                 review = runner.station("desk-reviewer", stage="review", revision=rev * 10 + k,
-                                        message=reviewer_message(loaded, thread, outcomes, sheet, result["rendered"]))
+                                        message=reviewer_message(loaded, thread, outcomes, sheet, result["rendered"],
+                                                                 sender=sender))
             except StationFailed as exc:
                 review = {"verdict": "revise", "findings": [{"rule_ref": "review", "problem": exc.message,
                                                              "suggestion": "A person should check the reply."}],
@@ -508,7 +535,8 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
                              recipients=recipients, subject=subject, attachments=att, digest=dg,
                              checks={"results": best["checks"], "passed": best["passed"], "style": style_notes,
                                      "fallback_reason": best.get("fallback_reason")},
-                             typed_values=best.get("typed_values") or [], state="ready")
+                             typed_values=best.get("typed_values") or [], state="ready",
+                             station_label=runner.label)
             tconn.execute("UPDATE resolutions SET resolver=?, reviewer=?, review_rounds=? WHERE case_id=? AND revision=?",
                           (store.dumps(best.get("resolver")), store.dumps(review), rounds, case_id, rev))
             store.update_case(tconn, case_id, state="needs_owner", queue=gathered["queue"], current_resolution=rev,

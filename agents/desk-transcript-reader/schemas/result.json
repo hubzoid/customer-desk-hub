@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["segments"],
+  "properties": {
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["line_from", "line_to", "request_text"],
+        "properties": {
+          "line_from": {"type": "integer"},
+          "line_to": {"type": "integer"},
+          "request_text": {"type": "string"}
+        }
+      }
+    }
+  }
+}

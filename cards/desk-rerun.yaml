@@ -1,0 +1,9 @@
+version: 1
+id: desk-rerun
+title: Case rerun
+binding:
+  tool: desk_rerun
+resource:
+  builtin: progress
+visibility: [model, app]
+allowed_tools: []

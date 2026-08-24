@@ -1,0 +1,14 @@
+version: 1
+# Write modes for replies (B029). Sample mode starts with email replies as
+# drafts in the sample mailbox and WhatsApp off. Nothing is ever sent
+# automatically: approve sends only after the requester approves the exact
+# reply on the Work items page.
+write_modes:
+  customer_reply.send: draft
+write_mode_overrides:
+  sample-whatsapp:
+    customer_reply.send: "off"
+work_items:
+  stations:
+    orchestrator_retries: 1
+    recovery_attempts: 1

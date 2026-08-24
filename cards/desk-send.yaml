@@ -1,0 +1,9 @@
+version: 1
+id: desk-send
+title: Reply send request
+binding:
+  tool: desk_request_send
+resource:
+  builtin: progress
+visibility: [model, app]
+allowed_tools: []

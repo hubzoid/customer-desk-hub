@@ -1,0 +1,9 @@
+version: 1
+id: desk-health
+title: Customer Desk health
+binding:
+  tool: desk_health
+resource:
+  builtin: report
+visibility: [model, app]
+allowed_tools: [desk_health]

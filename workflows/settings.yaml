@@ -1,0 +1,8 @@
+# Workflow engine settings for the Customer Desk.
+max_concurrent_workflows: 3
+webhooks:
+  zoho-desk:
+    verify: header
+    header: X-Webhook-Secret
+    event_key: "{ticketId}:{event}:{firedAt}"
+webhook_retry_delays: [60, 300]

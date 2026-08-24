@@ -1,0 +1,20 @@
+# Labels for the Customer Desk roles in the Console (Agents, the agent, Access).
+# Each role is granted per person. Grant a role to everyone who does that job.
+desk_operator:
+  label: Desk operator
+  description: Claim cases, edit replies, save drafts and ask to send. A send still waits for the person's own approval.
+  sensitive: true
+desk_delivery:
+  label: Desk delivery team
+  description: Own late orders and delivery date changes, and verify a change in ERPNext.
+desk_complaints:
+  label: Desk complaints team
+  description: Own complaint tickets and review escalation plans.
+desk_exceptions:
+  label: Desk exception decisions
+  description: Decide refunds and goodwill outside the policy.
+  sensitive: true
+desk_bindings:
+  label: Desk sender bindings
+  description: Match customer email addresses and phone numbers to ERP customers. Bindings decide whose data a case may read.
+  sensitive: true

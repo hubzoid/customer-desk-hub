@@ -1,0 +1,14 @@
+version: 1
+questions: false
+approvers: requester
+# Decisions a person makes through chat always show the exact action as a
+# card first. The agent cannot settle any of them on its own.
+tools:
+  desk_bind_case: {ask: always}
+  desk_bind_sender: {ask: always}
+  desk_revoke_binding: {ask: always}
+  desk_edit_reply: {ask: always}
+  desk_decide_exception: {ask: always}
+  desk_decline_delivery: {ask: always}
+  desk_review_plan: {ask: always}
+  desk_set_state: {ask: always}

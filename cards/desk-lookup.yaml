@@ -1,0 +1,9 @@
+version: 1
+id: desk-lookup
+title: ERPNext lookup
+binding:
+  tool: desk_lookup
+resource:
+  builtin: table
+visibility: [model, app]
+allowed_tools: [desk_lookup]

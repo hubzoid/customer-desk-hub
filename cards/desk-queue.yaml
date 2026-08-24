@@ -1,0 +1,9 @@
+version: 1
+id: desk-queue
+title: Customer Desk queue
+binding:
+  tool: desk_queue
+resource:
+  builtin: table
+visibility: [model, app]
+allowed_tools: [desk_queue]

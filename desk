@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""The Customer Desk command line. Run it with the Python that has Hubzoid installed: ./desk --help"""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "workflows" / "lib"))
+
+from customer_desk.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())

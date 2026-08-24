@@ -1,0 +1,9 @@
+version: 1
+id: desk-metrics
+title: Customer Desk measures
+binding:
+  tool: desk_metrics
+resource:
+  builtin: report
+visibility: [model, app]
+allowed_tools: [desk_metrics]

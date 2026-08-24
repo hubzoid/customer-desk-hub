@@ -1,0 +1,14 @@
+version: 1
+doctor:
+  - {id: desk-erp-read-only, entrypoint: doctor/checks.py:erp_read_only, timeout_seconds: 10, required: true}
+  - {id: desk-erp-company, entrypoint: doctor/checks.py:erp_company, timeout_seconds: 10, required: true, requires: [DESK_COMPANY]}
+  - {id: desk-erp-reads, entrypoint: doctor/checks.py:erp_reads, timeout_seconds: 30, required: true}
+  - {id: desk-sample-data, entrypoint: doctor/checks.py:sample_data, timeout_seconds: 10, required: true}
+  - {id: desk-policy, entrypoint: doctor/checks.py:policy, timeout_seconds: 10, required: true}
+  - {id: desk-vocabulary, entrypoint: doctor/checks.py:vocabulary, timeout_seconds: 10, required: true}
+  - {id: desk-write-modes, entrypoint: doctor/checks.py:write_modes, timeout_seconds: 10, required: true}
+  - {id: desk-channels, entrypoint: doctor/checks.py:channels, timeout_seconds: 10, required: true}
+  - {id: desk-helpdesk, entrypoint: doctor/checks.py:helpdesk, timeout_seconds: 10, required: true}
+  - {id: desk-live-mode, entrypoint: doctor/checks.py:live_mode, timeout_seconds: 10, required: true}
+  - {id: desk-roles, entrypoint: doctor/checks.py:roles, timeout_seconds: 10, required: false}
+  - {id: desk-test-switches, entrypoint: doctor/checks.py:test_switches, timeout_seconds: 10, required: true}

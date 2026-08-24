@@ -405,7 +405,7 @@ def price_availability(c: Context, n: int, req: dict) -> Outcome:
 def delivery_change(c: Context, n: int, req: dict) -> Outcome:
     pol = c.policy.category("delivery_change")
     out = Outcome(n, "delivery_change", "proposal", ["proposal", "rule_refusal", "already_delivered", "not_found",
-                                                     "clarify"], ["R3", "R12"])
+                                                     "clarify", "confirmed", "declined"], ["R3", "R12"])
     refs = _ids(req["references"]["orders"], "SO", c.policy.data["facts"]["id_patterns"])
     if len(refs) != 1:
         out.outcome = "clarify"
@@ -444,6 +444,16 @@ def delivery_change(c: Context, n: int, req: dict) -> Outcome:
                           scope={"whole_order": True}, requested_date=requested.isoformat(),
                           observed_date={"fact_id": out.slots["delivery_date"], "value": f.get("delivery_date")})
     out.slots["proposal"] = p["id"]
+    if p["state"] == "verified" and f.get("delivery_date") == requested.isoformat():
+        # ERPNext now holds the requested date: confirm it, quoting ERPNext's value.
+        out.outcome = "confirmed"
+        out.rule_refs = ["R3", "R12"]
+        return out
+    if p["state"] == "declined":
+        out.outcome = "declined"
+        out.rule_refs = ["R12", "R13"]
+        out.slots["reason"] = c.sheet.local("note", p.get("note") or "", name=p["id"], field="note")
+        return out
     out.queue = "delivery"
     return out
 
@@ -452,7 +462,8 @@ def delivery_change(c: Context, n: int, req: dict) -> Outcome:
 
 def complaint(c: Context, n: int, req: dict, *, severity_floor: str = "normal") -> Outcome:
     pol = c.policy.category("complaint")
-    out = Outcome(n, "complaint", "ticket", ["ticket", "refund_to_accounts", "refund_decision"], ["R14"])
+    out = Outcome(n, "complaint", "ticket", ["ticket", "refund_to_accounts", "refund_decision", "exception_approved",
+                                             "exception_declined"], ["R14"])
     severity = max(pol["default_severity"], severity_floor, key=SEVERITIES.index)
     if c.escalations:
         severity = max(severity, "high", key=SEVERITIES.index)
@@ -475,6 +486,7 @@ def complaint(c: Context, n: int, req: dict, *, severity_floor: str = "normal") 
                                       "reason": "no_invoice"})
         out.slots["decision"] = d["id"]
         out.queue = "decisions"
+        _decided(c, out, d)
         return out
     f = inv["fields"]
     out.slots["invoice"] = c.sheet.erp("invoice", inv, "name", inv["id"], party=f.get("customer"))
@@ -495,7 +507,21 @@ def complaint(c: Context, n: int, req: dict, *, severity_floor: str = "normal") 
                                       "amount_text": req.get("amount_text")})
         out.slots["decision"] = d["id"]
         out.queue = "decisions"
+        _decided(c, out, d)
     return out
+
+
+def _decided(c: Context, out: Outcome, d: dict) -> None:
+    """A recorded exception decision changes the outcome. The reply then says
+    what the named person decided, and only that."""
+    if d.get("state") == "approved":
+        out.outcome = "exception_approved"
+        out.queue = "complaints"
+        out.slots["decided"] = c.sheet.local("decision", "approved", name=d["id"], field="state")
+    elif d.get("state") == "declined":
+        out.outcome = "exception_declined"
+        out.queue = "complaints"
+        out.slots["decided"] = c.sheet.local("decision", "declined", name=d["id"], field="state")
 
 
 def other(c: Context, n: int, req: dict) -> Outcome:

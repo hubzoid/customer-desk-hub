@@ -17,6 +17,10 @@ templates:
     Here are the open invoices on your account. A CSV copy is attached.
   delivery_change.proposal: |
     Thank you. I have passed your request to move order [[order]] to [[requested_date]] to our delivery team. I will confirm once the new date shows in our system.
+  delivery_change.confirmed: |
+    Order [[order]] is now scheduled for delivery on [[delivery_date]], as you asked.
+  delivery_change.declined: |
+    I am sorry, we cannot move order [[order]] to [[requested_date]]. Our delivery team will contact you about the options.
   delivery_change.already_delivered: |
     Order [[order]] has already been delivered in full, so its delivery date can no longer be changed.
   complaint.ticket: |
@@ -25,6 +29,10 @@ templates:
     I have logged your request as [[ticket]] and passed it to our accounts team, who will confirm the next steps with you.
   complaint.refund_decision: |
     I have logged your request as [[ticket]]. It needs a decision from our team, and we will come back to you once it is made.
+  complaint.exception_approved: |
+    Thank you for your patience. Our team has approved an exception for invoice [[invoice]]. Our accounts team will issue the credit note and confirm it to you.
+  complaint.exception_declined: |
+    Thank you for your patience. Our team has reviewed your request about invoice [[invoice]] and cannot make an exception to our refund policy in this case. Your request stays logged as [[ticket]].
   other.acknowledge: |
     Thank you for your message. A member of our team will reply shortly.
 ---

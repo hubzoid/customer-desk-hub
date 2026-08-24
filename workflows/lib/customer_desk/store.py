@@ -81,6 +81,11 @@ CREATE TABLE IF NOT EXISTS bindings (
 CREATE UNIQUE INDEX IF NOT EXISTS bindings_active ON bindings(company, channel_kind, sender_key, customer_id)
   WHERE state = 'active';
 CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS plans (
+  case_id TEXT NOT NULL, version INTEGER NOT NULL, body TEXT NOT NULL, digest TEXT NOT NULL, state TEXT NOT NULL,
+  author TEXT NOT NULL, reviewer TEXT, note TEXT, created REAL NOT NULL, reviewed REAL, PRIMARY KEY (case_id, version));
+CREATE TABLE IF NOT EXISTS item_cases (
+  work_item_id TEXT PRIMARY KEY, case_id TEXT NOT NULL, resolution INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS owner_keys (
   case_id TEXT NOT NULL, key TEXT NOT NULL, kind TEXT NOT NULL, ref_id TEXT NOT NULL, PRIMARY KEY (case_id, key));
 CREATE TABLE IF NOT EXISTS attachments (
@@ -139,9 +144,21 @@ def connect(hub_dir: Path) -> sqlite3.Connection:
         conn.execute("PRAGMA busy_timeout=30000")
         conn.execute("PRAGMA foreign_keys=ON")
         conn.executescript(SCHEMA)
+        migrate(conn)
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
         cache[key] = conn
     return conn
+
+
+#: Columns added after the first release of a table: (table, column, type). Additive only.
+ADDED_COLUMNS = [("cases", "page_url", "TEXT"), ("replies", "station_label", "TEXT")]
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    for table, column, kind in ADDED_COLUMNS:
+        have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in have:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
 
 
 def reset_connections() -> None:
@@ -224,7 +241,8 @@ CASE_FIELDS = {"namespace", "origin_kind", "surface", "channel_id", "provider", 
                "intake_id", "sender_kind", "sender_key", "sender_display", "binding_id", "customer_id",
                "candidates", "state", "queue", "assignee", "claimed_by", "claimed_at", "work_item_id",
                "current_resolution", "current_reply", "policy_digest", "first_received_at",
-               "first_reply_accepted_at", "resolved_at", "reopen_count", "related", "opened_by", "synthetic", "note"}
+               "first_reply_accepted_at", "resolved_at", "reopen_count", "related", "opened_by", "synthetic", "note",
+               "page_url"}
 
 
 def create_case(conn, *, prefix: str, **fields) -> dict:
@@ -370,7 +388,8 @@ def set_reply_state(conn, case_id: str, revision: int, state: str, *, expect=Non
 def create_ticket(conn, *, prefix: str, case_id: str, severity: str, owner_role: str, summary: str,
                   reason: str | None = None) -> dict:
     tid = new_id()
-    number = next_number(conn, "ticket", prefix)
+    case = get_case(conn, case_id)
+    number = next_number(conn, f"ticket:{(case or {}).get('namespace', 'sample')}", prefix)
     now = time.time()
     conn.execute("INSERT INTO tickets(id, number, case_id, severity, owner_role, state, summary, reason, created, "
                  "updated) VALUES (?,?,?,?,?,'open',?,?,?,?)",
@@ -487,3 +506,30 @@ def upsert_send(conn, case_id: str, reply_revision: int, mode: str, **fields) ->
 
 def case_sends(conn, case_id: str) -> list[dict]:
     return rows(conn.execute("SELECT * FROM sends WHERE case_id=? ORDER BY reply_revision", (case_id,)))
+
+
+def reset_namespace(conn, namespace: str) -> dict:
+    """Remove every case of one namespace and everything hanging off it. Used
+    only for the sample namespace, by `desk sample reset`."""
+    ids = [r["id"] for r in conn.execute("SELECT id FROM cases WHERE namespace=?", (namespace,))]
+    counts = {"cases": len(ids)}
+    for table, col in (("case_events", "case_id"), ("resolutions", "case_id"), ("facts", "case_id"),
+                       ("replies", "case_id"), ("sends", "case_id"), ("delivery_proposals", "case_id"),
+                       ("decisions", "case_id"), ("plans", "case_id"), ("owner_keys", "case_id"),
+                       ("item_cases", "case_id"), ("outbox", "case_id"), ("helpdesk_writes", "case_id")):
+        n = 0
+        for cid in ids:
+            n += conn.execute(f"DELETE FROM {table} WHERE {col}=?", (cid,)).rowcount
+        counts[table] = n
+    tickets = [r["id"] for cid in ids for r in conn.execute("SELECT id FROM tickets WHERE case_id=?", (cid,))]
+    for tid in tickets:
+        conn.execute("DELETE FROM ticket_notes WHERE ticket_id=?", (tid,))
+        conn.execute("DELETE FROM tickets WHERE id=?", (tid,))
+    counts["tickets"] = len(tickets)
+    for cid in ids:
+        conn.execute("DELETE FROM helpdesk_tickets WHERE case_id=?", (cid,))
+        conn.execute("DELETE FROM cases WHERE id=?", (cid,))
+    conn.execute("DELETE FROM counters WHERE name IN (?, ?)", (f"case:{namespace}", f"ticket:{namespace}"))
+    conn.execute("DELETE FROM cursor WHERE name='zoho_poll'")
+    counts["bindings"] = conn.execute("DELETE FROM bindings WHERE synthetic=1").rowcount
+    return counts

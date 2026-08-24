@@ -42,7 +42,7 @@ REQUESTS = [
     (6, "email", HARBOR_ACCOUNTS, "Order check", "Can you check order SYN-SO-0004 for us? We cannot find it.", False,
      {"customer": "SYN-CUST-001", "categories": ["order_status"], "outcomes": ["not_found"], "queue": "operators",
       "must_not_include": ["Synthetic Lakeside", "January 22"]}),
-    (7, "email", HARBOR_ACCOUNTS, "Invoice copy", "Please send a copy of invoice SYN-SINV-0001.", True,
+    (7, "email", HARBOR_ACCOUNTS, "Invoice copy", "Please send a copy of invoice SYN-SINV-0001.", False,
      {"customer": "SYN-CUST-001", "categories": ["invoice_copy"], "outcomes": ["send_copy"], "queue": "operators",
       "attachments": ["SYN-SINV-0001.pdf"], "must_include": ["SYN-SINV-0001", "$1,250.00"]}),
     (8, "email", BLAKE, "Invoice PDF", "Our accounts team needs a PDF of invoice SYN-SINV-0004.", False,

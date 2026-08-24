@@ -1,0 +1,9 @@
+version: 1
+id: desk-case
+title: Customer Desk case
+binding:
+  tool: desk_show_case
+resource:
+  builtin: report
+visibility: [model, app]
+allowed_tools: [desk_show_case]

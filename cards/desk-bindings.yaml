@@ -1,0 +1,9 @@
+version: 1
+id: desk-bindings
+title: Sender bindings
+binding:
+  tool: desk_list_bindings
+resource:
+  builtin: table
+visibility: [model, app]
+allowed_tools: [desk_list_bindings]

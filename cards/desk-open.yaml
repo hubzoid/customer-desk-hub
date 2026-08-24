@@ -1,0 +1,9 @@
+version: 1
+id: desk-open
+title: Internal case
+binding:
+  tool: desk_open_case
+resource:
+  builtin: progress
+visibility: [model, app]
+allowed_tools: []

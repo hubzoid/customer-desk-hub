@@ -1,0 +1,9 @@
+version: 1
+id: desk-approval
+title: Reply waiting for approval
+binding:
+  tool: desk_pending_approval
+resource:
+  builtin: approval
+visibility: [model, app]
+allowed_tools: []
