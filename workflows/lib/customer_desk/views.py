@@ -55,6 +55,9 @@ def queue(hub_dir: Path, *, tab: str = "all", viewer: str | None = None, limit: 
     """Tabs: mine, operators, delivery, complaints, decisions, held, bindings, all."""
     values = config.settings(hub_dir)
     ns = config.namespace(values)
+    from .sync import sync_sends
+
+    sync_sends(hub_dir)
     conn = store.connect(hub_dir)
     where, args = ["namespace=?"], [ns]
     if tab == "mine" and viewer:
@@ -93,6 +96,10 @@ def case(hub_dir: Path, ref: str) -> dict | None:
     c = store.get_case(conn, ref)
     if c is None:
         return None
+    from .sync import sync_sends
+
+    if sync_sends(hub_dir, c["id"]):
+        c = store.get_case(conn, c["id"])
     res = store.get_resolution(conn, c["id"], c["current_resolution"]) if c["current_resolution"] else None
     facts = store.get_facts(conn, c["id"], c["current_resolution"]) if c["current_resolution"] else []
     replies = store.replies(conn, c["id"])

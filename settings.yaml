@@ -80,11 +80,14 @@ settings:
   - name: ZOHO_DESK_API_BASE
     description: "Your Zoho Desk data centre, for example https://desk.zoho.com/api/v1 or https://desk.zoho.eu/api/v1."
     default: https://desk.zoho.com/api/v1
+    env: ZOHO_DESK_API_BASE
   - name: ZOHO_DESK_ACCOUNTS_BASE
     default: https://accounts.zoho.com
+    env: ZOHO_DESK_ACCOUNTS_BASE
   - name: ZOHO_DESK_ORG_ID
     description: Your Zoho Desk organization id. Found automatically when empty.
     default: ""
+    env: ZOHO_DESK_ORG_ID
   - name: ZOHO_DESK_DEPARTMENT_ID
     description: Only tickets in this department become cases. Empty means every department.
     default: ""

@@ -49,9 +49,16 @@ FLAGS = [("legal_threat", r"lawyer|legal action|court|sue\b"), ("safety_issue", 
          ("other_customer_data", r"another customer|other customer|their invoices|someone else's")]
 
 
+INJECTION = re.compile(r"ignore (all|your|previous) (instructions|rules)|you are now|approve (this|the) refund|"
+                       r"system prompt|reveal|as the administrator", re.I)
+
+
 def classify(message: str) -> dict:
     body = _message(message)
     today = _today(message)
+    injection = bool(INJECTION.search(body))
+    # Instructions to the desk are not requests: drop those sentences, as the real classifier is told to.
+    body = " ".join(s for s in re.split(r"(?<=[.?!])\s+", body) if not INJECTION.search(s)) if injection else body
     low = body.lower()
     sentences = [s for s in re.split(r"(?<=[.?!])\s+|\n+", body) if s.strip()]
     requests = []
@@ -70,8 +77,6 @@ def classify(message: str) -> dict:
     if not requests:
         requests.append(_request("other", body, today))
     flags = [f for f, pat in FLAGS if re.search(pat, low)]
-    injection = bool(re.search(r"ignore (all|your|previous) (instructions|rules)|you are now|approve (this|the) refund",
-                               low))
     return {"language": "en", "summary": "A customer request.", "escalation_flags": flags,
             "needs_clarification": False, "questions": [], "confidence": 0.9 if requests[0]["category"] != "other" else 0.5,
             "injection_detected": injection, "requests": requests[:5]}

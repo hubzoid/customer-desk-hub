@@ -30,8 +30,16 @@ WRITE_SCOPE = "Desk.tickets.READ,Desk.tickets.CREATE,Desk.tickets.UPDATE,Desk.ba
 ORG_ID = "70000001"
 
 
+_LAST = [0.0]
+_CLOCK = threading.Lock()
+
+
 def _now() -> str:
-    return time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    """Zoho-style UTC time in milliseconds, strictly increasing, like real thread times."""
+    with _CLOCK:
+        t = max(time.time(), _LAST[0] + 0.001)
+        _LAST[0] = t
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(t)) + f".{int(t * 1000) % 1000:03d}Z"
 
 
 class FakeZoho:

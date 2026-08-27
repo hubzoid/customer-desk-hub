@@ -95,6 +95,12 @@ def stop_switch(hub_dir: Path) -> str | None:
 
 class _Base:
     def __init__(self, creds: Credentials, *, state_dir: Path, transport: httpx.BaseTransport | None = None):
+        if os.environ.get("DESK_LOOPBACK_ONLY") == "1":
+            # A test and demo guard: never reach a real Zoho data centre from a fake setup.
+            for url in (creds.api_base, creds.accounts_base):
+                host = httpx.URL(url).host
+                if host not in ("127.0.0.1", "localhost", "::1"):
+                    raise ZohoError(0, "loopback_only", f"DESK_LOOPBACK_ONLY is set, so {host} is refused.")
         self.creds = creds
         self.state_dir = Path(state_dir)
         self.http = httpx.Client(timeout=TIMEOUT, follow_redirects=False, transport=transport)

@@ -48,9 +48,15 @@ class HubRunner(pipeline.Runner):
         if self._scripted is not None:
             from hubzoid import hub
 
-            return hub.work_item.checkpoint(f"scripted-{stage}-{revision}",
-                                            lambda: self._scripted(agent, stage=stage, revision=revision,
-                                                                   message=message))
+            def scripted_call():
+                delay = float(os.environ.get("DESK_SCRIPTED_DELAY") or 0)
+                if delay and agent == "desk-resolver":
+                    import time
+
+                    time.sleep(delay)     # a test seam: room to kill the engine mid-station
+                return self._scripted(agent, stage=stage, revision=revision, message=message)
+
+            return hub.work_item.checkpoint(f"scripted-{stage}-{revision}", scripted_call)
         from hubzoid import hub
         from hubzoid.stations import StationError, StationOutputError
 
@@ -131,6 +137,7 @@ def triage_item(inp: dict | None = None) -> dict:
         return {"state": "ignored", "message": f"Unknown input kind {kind!r}."}
     if opened.get("action") == "duplicate":
         return {"state": "duplicate", "case": opened["number"]}
+    hub.work_item.checkpoint("cancel-stale-sends", lambda: cancel_pending_sends(hub_dir, opened["case_id"]))
     try:
         result = pipeline.triage(hub_dir, opened["case_id"], HubRunner(hub_dir), trigger=trigger,
                                  instruction=instruction)
@@ -359,8 +366,11 @@ def case_item() -> dict:
         return _stale(hub_dir, case, reply, requester, stale)
     pl = replies.payload(hub_dir, case, reply)
     channel = case["channel_id"]
-    version = replies.target_version(hub_dir, case["id"], reply["revision"],
-                                     lambda: recheck.facts_state(hub_dir, case, reply["resolution"], policy=loaded.policy))
+    # Staleness is checked inside dispatch, after the requester's approval and
+    # just before anything leaves: a newer reply or message, a changed ERP
+    # fact, or a changed policy refuses the send outright (Rejected), and the
+    # desk drafts a new revision. A fresh approval of stale content is never
+    # what a person wants, so no target_version re-park is used here.
 
     def dispatch(args):
         fresh = store.get_case(store.connect(hub_dir), case["id"])
@@ -369,6 +379,10 @@ def case_item() -> dict:
         if recheck.changed_facts(hub_dir, fresh, store.get_facts(store.connect(hub_dir), case["id"], reply["resolution"]),
                                  policy=loaded.policy):
             raise Rejected("reply_stale: ERPNext changed after approval.")
+        current = pipeline.load(hub_dir)
+        res = store.get_resolution(store.connect(hub_dir), case["id"], reply["resolution"])
+        if current.policy.digest != res["policy_digest"] or current.style.digest != res["style_digest"]:
+            raise Rejected("reply_stale: the policy or reply style changed after this reply was drafted.")
         if channel == "sample-whatsapp" and not replies.whatsapp_window_open(hub_dir, fresh):
             raise Rejected("window_closed: WhatsApp allows a free-form reply only within 24 hours of the "
                            "customer's last message.")
@@ -377,8 +391,10 @@ def case_item() -> dict:
         if fault == "fail_before_write" and not _fault_used(hub_dir, "before"):
             raise TimeoutError("injected: the outbox did not answer")
         result = replies._sample_write(hub_dir, args, "send", requester)
-        if fault in ("lose_receipt", "ambiguous") and not _fault_used(hub_dir, "after"):
+        if fault == "ambiguous" and not _fault_used(hub_dir, "after"):
             raise TimeoutError("injected: the outbox accepted it, then the connection dropped")
+        if fault == "die_after_write" and not _fault_used(hub_dir, "after"):
+            os._exit(9)          # injected: the process dies after the outbox accepted the reply
         return result
 
     def draft(args):
@@ -401,10 +417,26 @@ def case_item() -> dict:
     try:
         result = hub.operation.run(name="customer_reply", target={"case": case["number"], "reply": reply["revision"]},
                                    arguments=pl, recovery="reconcile", actions="customer_reply.send", channel=channel,
-                                   target_version=version, **kwargs)
+                                   **kwargs)
     except OperationFailed as exc:
-        return hub.work_item.checkpoint("settle-failed", lambda: _failed(hub_dir, case, reply, action, exc, requester))
+        out = hub.work_item.checkpoint("settle-failed", lambda: _failed(hub_dir, case, reply, action, exc, requester))
+        if out.get("state") == "reply_stale":
+            _redraft(hub_dir, case, requester, reason="stale_at_dispatch")
+        return out
     return hub.work_item.checkpoint("settle", lambda: _settled(hub_dir, case, reply, action, result, requester))
+
+
+def _redraft(hub_dir: Path, case: dict, requester: str, *, reason: str, stale=None) -> None:
+    """Start a new resolution for the person who asked, so they review a reply
+    drafted from the current facts and policy."""
+    from . import actions
+
+    actor = actions.Actor(requester, lambda role: True)
+    try:
+        actions.rerun(hub_dir, case["number"], actor, instruction=None, start=start_work(hub_dir), reason=reason,
+                      stale=stale)
+    except actions.ActionError:
+        pass
 
 
 def _fault_used(hub_dir: Path, which: str) -> bool:
@@ -431,14 +463,7 @@ def _stale(hub_dir, case, reply, requester, stale):
         return {"state": "reply_stale", "stale": stale}
 
     out = hub.work_item.checkpoint("stale", go)
-    from . import actions
-
-    actor = actions.Actor(requester, lambda role: True)
-    try:
-        actions.rerun(hub_dir, case["number"], actor, instruction=None, start=start_work(hub_dir), reason="facts_changed",
-                      stale=stale)
-    except actions.ActionError:
-        pass
+    _redraft(hub_dir, case, requester, reason="facts_changed", stale=stale)
     return out
 
 
@@ -515,3 +540,26 @@ def channel_send(hub_dir: Path, case: dict, reply: dict, requester: str) -> dict
         return hub.work_item.checkpoint("settle-failed", lambda: _failed(hub_dir, case, reply, "send", exc, requester))
     return hub.work_item.checkpoint("settle", lambda: _settled(hub_dir, case, reply, "send",
                                                                result if isinstance(result, dict) else {}, requester))
+
+
+def cancel_pending_sends(hub_dir: Path, case_id: str) -> list[str]:
+    """A newer customer message made every unsent reply stale. Cancel the send
+    work still waiting for approval, as its own requester, so no stale reply
+    waits on the Work items page. Dispatch would refuse it anyway."""
+    from hubzoid.work_items import service as wi
+
+    cancelled = []
+    conn = store.connect(hub_dir)
+    for s in store.case_sends(conn, case_id):
+        reply = store.get_reply(conn, case_id, s["reply_revision"])
+        if reply is None or reply["state"] != "superseded":
+            continue
+        if s["status"] == "waiting_approval" and s.get("work_item_id") and s.get("requested_by"):
+            try:
+                wi.cancel(hub_dir, s["work_item_id"], s["requested_by"], reason="A newer customer message arrived.")
+                cancelled.append(s["work_item_id"])
+            except Exception:  # noqa: BLE001 - dispatch still refuses a stale reply
+                continue
+            with store.tx(hub_dir) as conn:
+                store.upsert_send(conn, case_id, s["reply_revision"], s["mode"], status="cancelled_stale")
+    return cancelled
