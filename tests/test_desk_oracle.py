@@ -4,12 +4,33 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from conftest import load_sample, triage_envelope
 from customer_desk import store
 
 
-def test_twenty_requests_match_oracle(bound):
-    hub = bound
+@pytest.fixture(params=["sample", "fake_rest"])
+def backend_hub(request, bound):
+    if request.param == "sample":
+        yield bound
+        return
+    from customer_desk.erpnext import frappe_rest
+    from customer_desk.erpnext.fake_rest import FakeFrappe
+
+    fake = FakeFrappe(bound / "fixtures" / "erp" / "distributor-v1")
+    base = fake.start()
+    frappe_rest.SLEEP = lambda s: None
+    path = bound / "connectors" / "erpnext.yaml"
+    path.write_text(path.read_text().replace("backend: sample", "backend: fake_rest").replace(
+        "site_url: null", f"site_url: {base}"))
+    yield bound
+    assert fake.refused == []            # the desk never sent anything but GET
+    fake.stop()
+
+
+def test_twenty_requests_match_oracle(backend_hub):
+    hub = backend_hub
     expected = json.loads((hub / "evals" / "expected" / "customer-desk-20.json").read_text())
     problems = []
     for env in load_sample(hub):

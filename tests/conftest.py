@@ -18,8 +18,9 @@ sys.path.insert(0, str(HUB / "workflows" / "lib"))
 from customer_desk import bindings, cases, envelopes, pipeline, store  # noqa: E402
 from customer_desk.scripted import ScriptedStations  # noqa: E402
 
-COPY = ["AGENTS.md", "settings.yaml", "hub.settings.yaml", "knowledge", "connectors", "fixtures", "agents",
-        "evals", "work-items.yaml", "hitl.yaml"]
+COPY = ["AGENTS.md", "settings.yaml", "hub.settings.yaml", "hub.manifest.yaml", "knowledge", "connectors", "fixtures",
+        "agents", "evals", "work-items.yaml", "hitl.yaml", "workflows", "tools_local", "restricted", "identity",
+        "cards", "mcp-apps.yaml", "doctor"]
 
 
 class LocalRunner(pipeline.Runner):
@@ -42,7 +43,7 @@ def hub(tmp_path, monkeypatch):
     for name in COPY:
         src = HUB / name
         if src.is_dir():
-            shutil.copytree(src, root / name)
+            shutil.copytree(src, root / name, ignore=shutil.ignore_patterns("__pycache__"))
         elif src.exists():
             shutil.copy(src, root / name)
     monkeypatch.setenv("DESK_DB", str(tmp_path / "desk.sqlite"))
