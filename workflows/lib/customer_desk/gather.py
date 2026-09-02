@@ -292,6 +292,16 @@ def account_statement(c: Context, n: int, req: dict) -> Outcome:
 
 # -- price and availability ------------------------------------------------------------
 
+def _stem(word: str) -> str:
+    """A plain English plural stem: boxes and box, pallets and pallet, crates and crate."""
+    for end in ("xes", "ses", "shes", "ches", "zes"):
+        if word.endswith(end) and len(word) > len(end) + 1:
+            return word[: -2]
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    return word[:-1] if word.endswith("s") and not word.endswith("ss") and len(word) > 3 else word
+
+
 def _find_items(c: Context, text: str) -> list[dict]:
     text = (text or "").strip()
     codes = [m.group(0).upper() for p in c.policy.data["facts"]["id_patterns"]
@@ -309,8 +319,8 @@ def _find_items(c: Context, text: str) -> list[dict]:
     scored = []
     for rec in every:
         name = (rec["fields"].get("item_name") or "").casefold()
-        stems = {w.rstrip("s") for w in re.findall(r"[a-z0-9]+", name)}
-        hits = sum(1 for w in words if w.rstrip("s") in stems)
+        stems = {_stem(w) for w in re.findall(r"[a-z0-9]+", name)}
+        hits = sum(1 for w in words if _stem(w) in stems)
         if hits:
             scored.append((hits, rec))
     if not scored:
@@ -347,6 +357,7 @@ def price_availability(c: Context, n: int, req: dict) -> Outcome:
     disclosure = pol["availability"]["disclosure"]
     any_candidates = False
     any_quoted = False
+    any_unknown = False
     for want in wanted[:20]:
         found = _find_items(c, want.get("text", ""))
         active = [r for r in found if not r["fields"].get("disabled")]
@@ -354,7 +365,12 @@ def price_availability(c: Context, n: int, req: dict) -> Outcome:
             out.slots["items"].append({"item": c.sheet.erp("item", found[0], "item_name"), "quotable": False})
             out.notes.append(f"{found[0]['id']} is disabled and cannot be quoted.")
             continue
-        if len(active) != 1:
+        if not active:
+            any_unknown = True
+            out.slots["items"].append({"asked": c.sheet.message("item_text", want.get("text", ""), field="item text"),
+                                       "unknown": True})
+            continue
+        if len(active) > 1:
             any_candidates = True
             out.slots["items"].append({"asked": c.sheet.message("item_text", want.get("text", ""), field="item text"),
                                        "candidates": [c.sheet.erp("item", r, "item_name") for r in active]})
@@ -394,9 +410,15 @@ def price_availability(c: Context, n: int, req: dict) -> Outcome:
     elif any_candidates:
         out.notes.append("Some items matched more than one product. Ask which one.")
         out.questions.append("Which of these items do you mean?")
+    elif any_unknown and not any_quoted:
+        out.outcome = "clarify"
+        out.rule_refs = ["R11", "R17"]
+        out.questions.append("We could not find that item. Could you send its item code or full name?")
     elif not any_quoted:
         out.outcome = "not_quotable"
         out.rule_refs = ["R9"]
+    if any_unknown and any_quoted:
+        out.notes.append("Some item names matched nothing. Ask for the item code.")
     return out
 
 

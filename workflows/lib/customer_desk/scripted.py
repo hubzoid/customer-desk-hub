@@ -18,7 +18,9 @@ ID = r"SYN-[A-Z]+-[0-9]+"
 
 def _message(text: str) -> str:
     m = re.search(r"<customer_message>\n(.*?)\n</customer_message>", text, re.S)
-    return m.group(1) if m else text
+    body = m.group(1) if m else text
+    # Attachments are data. The stand-in reads only what the customer wrote.
+    return re.sub(r"\[attachment [^\]]*\][^\n]*\n?(?:(?!\[(?:message|attachment|a note)).*\n?)*", "", body)
 
 
 def _today(text: str) -> dt.date:
@@ -42,15 +44,17 @@ CATS = [
     ("account_statement", r"statement|open invoices|everything we (still )?owe|unpaid invoices|what we owe"),
     ("invoice_copy", r"copy of (the )?invoice|invoice copy|resend .*invoice|pdf of|send .*invoice"),
     ("price_availability", r"price|in stock|availability|how much|do you have|stock"),
-    ("order_status", r"where is|status|has .* shipped|when will|arrive|track|update on (my|our) order|check .*order"),
+    ("order_status", r"where is|status|has .* shipped|when will|arrive|track|update on (my|our) order|check .*order|"
+                     r"news on (my|our) order|i mean order"),
 ]
 FLAGS = [("legal_threat", r"lawyer|legal action|court|sue\b"), ("safety_issue", r"injur|unsafe|hurt"),
          ("personal_data_request", r"delete (my|our) (personal )?data|personal data"),
          ("other_customer_data", r"another customer|other customer|their invoices|someone else's")]
 
 
-INJECTION = re.compile(r"ignore (all|your|previous) (instructions|rules)|you are now|approve (this|the) refund|"
-                       r"system prompt|reveal|as the administrator", re.I)
+INJECTION = re.compile(r"ignore (?:(?:all|your|previous|my) )+(?:instructions|rules)|you are now|"
+                       r"approve (?:this|the) refund|mark every refund|system prompt|system notice|reveal|"
+                       r"as the administrator|administrator mode", re.I)
 
 
 def classify(message: str) -> dict:
@@ -74,6 +78,13 @@ def classify(message: str) -> dict:
                 continue
             relevant = " ".join(s for s in sentences if re.search(pat, s.lower())) or body
             requests.append(_request(cat, body if cat in ("complaint", "delivery_change") else relevant, today))
+    # One request per thing asked, in the order the customer asked them.
+    def first_hit(r):
+        pat = dict(CATS)[r["category"]]
+        m = re.search(pat, low)
+        return m.start() if m else len(low)
+
+    requests.sort(key=first_hit)
     if not requests:
         requests.append(_request("other", body, today))
     flags = [f for f, pat in FLAGS if re.search(pat, low)]
@@ -87,8 +98,8 @@ def _request(cat: str, text: str, today: dt.date) -> dict:
     invoices = re.findall(r"SYN-SINV-\d+", text)
     items = [{"text": code, "quantity": None} for code in re.findall(r"SYN-ITEM-\d+", text)]
     if cat == "price_availability" and not items:
-        m = re.search(r"(?:price|stock|have|for|of) (?:the |your |any )?([a-z ,-]{3,40}?)(?:\?|\.| and| in stock|$)",
-                      text.lower())
+        m = re.search(r"(?:price for|price of|cost of|much are|much is|do you have|have any) (?:the |your |any |our )?"
+                      r"([a-z][a-z ,-]{2,40}?)(?: for us| in stock|,|\?|\.| and|$)", text.lower())
         if m:
             items = [{"text": m.group(1).strip(), "quantity": None}]
     dates = _dates(text, today)
