@@ -1,0 +1,12 @@
+version: 1
+id: legal-threat
+tags: [conversation, escalation]
+persona: lakeside
+steps:
+  - customer: "Half the boxes from order SYN-SO-0003 arrived damaged. If this is not fixed this week our lawyer will start legal action."
+expect:
+  state: needs_owner
+  queue: complaints
+  flags_include: [legal_threat]
+  tickets: [{owner_role: complaints, severity: high}]
+  must_not_include: ["compensation agreed", "our fault", "we admit"]

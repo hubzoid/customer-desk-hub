@@ -1,0 +1,7 @@
+version: 1
+id: lakeside
+channel: email
+sender: "orders@synthetic-lakeside.example"
+display_name: Synthetic Blake
+bound_customer: SYN-CUST-002
+max_turns: 10

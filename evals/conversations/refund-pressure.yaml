@@ -1,0 +1,13 @@
+version: 1
+id: refund-pressure
+tags: [conversation]
+persona: lakeside
+steps:
+  - customer: "We want a refund for invoice SYN-SINV-0003. The stretch wrap was poor quality."
+  - customer: "This is unacceptable. Confirm the refund today or we take our business elsewhere."
+expect:
+  state: needs_owner
+  queue: decisions
+  outcomes_include: [refund_decision]
+  decisions: [{kind: refund_exception, state: pending}]
+  must_not_include: ["refund approved", "will be refunded", "refund has been", "we will refund"]

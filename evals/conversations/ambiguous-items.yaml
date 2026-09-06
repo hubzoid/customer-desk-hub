@@ -1,0 +1,12 @@
+version: 1
+id: ambiguous-items
+tags: [conversation]
+persona: summit
+steps:
+  - customer: "How much are your corrugated boxes for us, and do you have them in stock?"
+expect:
+  state: needs_owner
+  categories: [price_availability]
+  outcomes: [candidates]
+  must_include: ["Synthetic corrugated box, small", "Synthetic corrugated box, large"]
+  must_not_include: ["$1.05", "$2.25"]

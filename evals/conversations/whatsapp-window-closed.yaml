@@ -1,0 +1,12 @@
+version: 1
+id: whatsapp-window-closed
+tags: [conversation, approve, whatsapp]
+persona: lakeside-wa
+write_mode: approve
+steps:
+  - customer: "What is the status of order SYN-SO-0004?"
+    received_at: "2000-01-13T09:00:00Z"
+  - operator: send
+expect:
+  state: held
+  outbox: 0

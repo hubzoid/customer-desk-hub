@@ -1,0 +1,15 @@
+version: 1
+id: reopen-after-resolution
+tags: [conversation, approve]
+persona: harbor-buyer
+write_mode: approve
+steps:
+  - customer: "Where is order SYN-SO-0001?"
+  - operator: send
+  - customer: "Thanks. One more thing: could you also send a copy of invoice SYN-SINV-0002?"
+expect:
+  state: needs_owner
+  reopen_count: 1
+  outcomes_include: [send_copy]
+  outbox: 1
+  must_include: ["SYN-SINV-0002"]

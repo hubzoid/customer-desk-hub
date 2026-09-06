@@ -1,0 +1,12 @@
+version: 1
+id: three-requests
+tags: [conversation]
+persona: harbor-buyer
+steps:
+  - customer: "Three things please: where is order SYN-SO-0001, can you send a copy of invoice SYN-SINV-0002, and what is our price for packing tape SYN-ITEM-004?"
+expect:
+  state: needs_owner
+  categories: [order_status, invoice_copy, price_availability]
+  outcomes: [answer, send_copy, quote]
+  attachments: [SYN-SINV-0002.pdf]
+  must_include: ["SYN-SO-0001", "SYN-SINV-0002", "$3.40"]

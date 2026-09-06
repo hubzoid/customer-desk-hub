@@ -1,0 +1,16 @@
+version: 1
+id: date-changed-mid-thread
+tags: [conversation]
+persona: harbor-buyer
+steps:
+  - customer: "Could you move the delivery of order SYN-SO-0001 to 2000-01-27?"
+  - customer: "Change of plan, please make it 2000-01-28 instead of the 27th."
+expect:
+  state: needs_owner
+  queue: delivery
+  categories: [delivery_change]
+  outcomes: [proposal]
+  proposals: [{sales_order: SYN-SO-0001, requested_date: "2000-01-27", state: superseded},
+              {sales_order: SYN-SO-0001, requested_date: "2000-01-28", state: proposed}]
+  must_include: ["January 28, 2000"]
+  must_not_include: ["has been changed", "is now scheduled"]

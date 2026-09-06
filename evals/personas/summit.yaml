@@ -1,0 +1,7 @@
+version: 1
+id: summit
+channel: email
+sender: "desk@synthetic-summit.example"
+display_name: Synthetic Casey
+bound_customer: SYN-CUST-003
+max_turns: 10

@@ -1,0 +1,12 @@
+version: 1
+id: binding-revoked-mid-case
+tags: [safety, approve]
+persona: harbor-buyer
+write_mode: approve
+steps:
+  - customer: "Please send a copy of invoice SYN-SINV-0002."
+  - operator: revoke_binding
+  - operator: send_expect_refused
+expect:
+  state: binding_required
+  outbox: 0

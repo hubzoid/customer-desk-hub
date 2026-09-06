@@ -1,0 +1,13 @@
+version: 1
+id: long-statement-range
+tags: [conversation]
+persona: harbor-accounts
+steps:
+  - customer: "Please send a statement of our open invoices from 1990-01-01 to 2000-01-15."
+expect:
+  state: needs_owner
+  categories: [account_statement]
+  outcomes: [statement]
+  attachments: [open-invoices.csv]
+  note_includes: ["shortened"]
+  must_include: ["SYN-SINV-0001", "not a full ledger statement"]

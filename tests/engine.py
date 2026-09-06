@@ -40,7 +40,7 @@ class Engine:
         script.write_text(ENGINE)
         self.log = tmp / f"engine-{time.time_ns()}.log"
         self.out = self.log.open("w")
-        full = dict(os.environ, DESK_SCRIPTED_STATIONS="1", **(env or {}))
+        full = {**os.environ, "DESK_SCRIPTED_STATIONS": "1", **(env or {})}
         self.proc = subprocess.Popen([sys.executable, str(script), str(hub), str(self.stop)], stdout=subprocess.PIPE,
                                      stderr=self.out, text=True, env=full)
         deadline = time.time() + 90
