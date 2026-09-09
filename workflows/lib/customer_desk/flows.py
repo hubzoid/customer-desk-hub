@@ -78,10 +78,10 @@ class HubRunner(pipeline.Runner):
 def start_work(hub_dir: Path):
     """The `start` function actions use: Hubzoid work items, as the person."""
 
-    def start(workflow: str, *, key: str, route: str, input: dict, requester: str) -> dict:
+    def start(workflow: str, *, key: str, route: str, input: dict, requester: str, origin: dict | None = None) -> dict:
         from hubzoid.work_items import service as wi
 
-        origin = {"surface": "desk", "requested_by": requester, "acts_as": requester}
+        origin = origin or {"surface": "desk", "requested_by": requester, "acts_as": requester}
         item, _ = wi.admit_and_start(hub_dir, workflow=workflow, key=key, route=route, input=input,
                                      requester=requester, origin=origin)
         return item
@@ -110,6 +110,7 @@ def triage_item(inp: dict | None = None) -> dict:
             return {"state": "ignored", "message": f"Channel {inp.get('channel')} is not in DESK_EXTERNAL_CHANNELS."}
         env = envelopes.from_intake_item(inp)
         opened = hub.work_item.checkpoint("intake", lambda: cases.intake(hub_dir, env))
+        hub.work_item.checkpoint("origin", lambda: remember_origin(hub_dir, opened["case_id"]))
     elif kind == "helpdesk":
         opened = helpdesk_intake(hub_dir, values, str(inp["ticket_id"]))
         if opened is None:
@@ -154,6 +155,21 @@ def triage_item(inp: dict | None = None) -> dict:
     if case["surface"] == "helpdesk" and values["DESK_HELPDESK"] == "zoho_desk":
         result["helpdesk"] = helpdesk_writeback(hub_dir, values, case)
     return result
+
+
+def remember_origin(hub_dir: Path, case_id: str) -> dict:
+    """Keep the channel origin of the first message, so a person's reply goes
+    back on the same thread through `hub.thread`, and nowhere else."""
+    from hubzoid import hub
+    from hubzoid.work_items import store as wi_store
+
+    item = wi_store.get_item(hub_dir, hub.work_item.id)
+    origin = dict((item or {}).get("origin_json") or {})
+    with store.tx(hub_dir) as conn:
+        c = store.get_case(conn, case_id)
+        if not c.get("origin") and origin.get("surface") == "channel":
+            store.update_case(conn, case_id, origin=origin)
+    return origin
 
 
 def _hub_dir() -> Path:
@@ -413,7 +429,7 @@ def case_item() -> dict:
         kwargs = dict(dispatch=replies.refuse_helpdesk_send, draft=replies.zoho_draft(hub_dir, values, case, reply),
                       reconcile=replies.zoho_reconcile(hub_dir, values, case, reply))
     else:
-        return channel_send(hub_dir, case, reply, requester)
+        return channel_send(hub_dir, case, reply, requester, action)
     try:
         result = hub.operation.run(name="customer_reply", target={"case": case["number"], "reply": reply["revision"]},
                                    arguments=pl, recovery="reconcile", actions="customer_reply.send", channel=channel,
@@ -524,7 +540,7 @@ def _failed(hub_dir, case, reply, action, exc, requester):
     return {"state": status, "message": text[:500]}
 
 
-def channel_send(hub_dir: Path, case: dict, reply: dict, requester: str) -> dict:
+def channel_send(hub_dir: Path, case: dict, reply: dict, requester: str, action: str = "send") -> dict:
     """A Hubzoid email or WhatsApp channel: the reply goes back on the case's
     stored origin thread through `hub.thread.post`, text only."""
     from hubzoid import hub
@@ -535,11 +551,13 @@ def channel_send(hub_dir: Path, case: dict, reply: dict, requester: str) -> dict
                 "message": "Hubzoid channel replies carry text only. Save the reply as a draft, or send it with the "
                            "attachment from your own mailbox."}
     try:
-        result = hub.thread.post(reply["rendered"], key=f"desk:{case['id']}:{reply['revision']}:send")
+        posted = hub.thread.post(reply["rendered"], key=f"desk:{case['id']}:{reply['revision']}:{action}")
     except OperationFailed as exc:
-        return hub.work_item.checkpoint("settle-failed", lambda: _failed(hub_dir, case, reply, "send", exc, requester))
-    return hub.work_item.checkpoint("settle", lambda: _settled(hub_dir, case, reply, "send",
-                                                               result if isinstance(result, dict) else {}, requester))
+        return hub.work_item.checkpoint("settle-failed", lambda: _failed(hub_dir, case, reply, action, exc, requester))
+    result = (posted[0] if isinstance(posted, list) and posted else posted) or {}
+    if not isinstance(result, dict):
+        result = {"result": result}
+    return hub.work_item.checkpoint("settle", lambda: _settled(hub_dir, case, reply, action, result, requester))
 
 
 def cancel_pending_sends(hub_dir: Path, case_id: str) -> list[str]:

@@ -39,10 +39,11 @@ def desk_release(case: str) -> str:
 
 @function_tool
 @chat.guard
-def desk_edit_reply(case: str, body: str) -> str:
+def desk_edit_reply(case: str, body: str, keep_attachments: bool = True) -> str:
     """Save the teammate's own version of the reply, exactly as they wrote it. Never change their words. Fact
-    placeholders such as [[F3]] may stay. Values they type are flagged on the approval card."""
-    return json.dumps(actions.edit_reply(HUB, case, _a(), body))
+    placeholders such as [[F3]] may stay. Values they type are flagged on the approval card. keep_attachments false
+    drops the attachments, for a channel that carries text only."""
+    return json.dumps(actions.edit_reply(HUB, case, _a(), body, keep_attachments=keep_attachments))
 
 
 @function_tool
@@ -106,3 +107,26 @@ def desk_import_transcript(customer_id: str, transcript_text: str, name: str = "
     out = import_transcript(HUB, _a(), customer_id=customer_id, text=transcript_text, name=name,
                             start=start_work(HUB))
     return chat.progress(out, f"Reading {out['lines']} transcript lines for customer requests.")
+
+
+@function_tool
+@chat.guard
+def desk_preview(customer_id: str, text: str) -> str:
+    """Try a customer message against the desk for a named customer without opening a case: shows the outcome,
+    the facts, the reply and its checks, and the policy settings the policy file leaves to defaults. Nothing is
+    saved to the queue, drafted or sent."""
+    out = actions.preview(HUB, _a(), customer_id=customer_id, text=text, start=start_work(HUB))
+    return chat.progress(out, f"Preparing preview {out['preview']}. Ask for desk_preview_result {out['preview']} in "
+                              "a minute.")
+
+
+@function_tool
+@chat.guard
+def desk_preview_result(preview: str) -> str:
+    """The result of a preview: outcomes, facts, the reply with its checks, and the policy gaps."""
+    from customer_desk import store
+
+    c = store.get_case(store.connect(HUB), preview)
+    if c is None or c["namespace"] != "preview":
+        return json.dumps({"error": "not_found", "message": f"No preview {preview}."})
+    return json.dumps(actions.preview_result(HUB, c["id"]))

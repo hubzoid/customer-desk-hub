@@ -121,6 +121,16 @@ def load(hub_dir: Path) -> ConnectorConfig:
         page_size=data.get("page_size", 50), path=str(FILE))
 
 
+def sample_overlay(hub_dir: Path) -> Path:
+    """Where `desk sample erp-set` keeps the sample ERP edits, in the hub's private data folder."""
+    try:
+        from hubzoid.datadir import state
+
+        return state(Path(hub_dir)) / "data" / "sample-erp-overlay.json"
+    except ImportError:  # pragma: no cover
+        return Path(hub_dir) / ".hubzoid" / "data" / "sample-erp-overlay.json"
+
+
 def dataset_dir(hub_dir: Path, dataset: str) -> Path:
     return Path(hub_dir) / "fixtures" / "erp" / dataset
 
@@ -131,7 +141,7 @@ def backend(hub_dir: Path, cfg: ConnectorConfig | None = None, *, transport=None
     if cfg.backend == "sample":
         from .sample import SampleBackend
 
-        return SampleBackend(dataset_dir(hub_dir, cfg.dataset), company=cfg.company)
+        return SampleBackend(dataset_dir(hub_dir, cfg.dataset), company=cfg.company, overlay=sample_overlay(hub_dir))
     from .frappe_rest import FrappeRestBackend
 
     token = None

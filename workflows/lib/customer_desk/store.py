@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS audit (
 
 JSON_COLUMNS = {"candidates", "related", "attachments", "classifier", "second_opinion", "requests", "actions",
                 "resolver", "reviewer", "value", "source", "recipients", "checks", "typed_values", "receipt",
-                "scope", "observed_date", "verified", "inputs", "request", "response", "detail"}
+                "scope", "observed_date", "verified", "inputs", "request", "response", "detail", "origin"}
 
 _LOCAL = threading.local()
 
@@ -151,7 +151,7 @@ def connect(hub_dir: Path) -> sqlite3.Connection:
 
 
 #: Columns added after the first release of a table: (table, column, type). Additive only.
-ADDED_COLUMNS = [("cases", "page_url", "TEXT"), ("replies", "station_label", "TEXT")]
+ADDED_COLUMNS = [("cases", "page_url", "TEXT"), ("replies", "station_label", "TEXT"), ("cases", "origin", "TEXT")]
 
 
 def migrate(conn: sqlite3.Connection) -> None:
@@ -242,7 +242,7 @@ CASE_FIELDS = {"namespace", "origin_kind", "surface", "channel_id", "provider", 
                "candidates", "state", "queue", "assignee", "claimed_by", "claimed_at", "work_item_id",
                "current_resolution", "current_reply", "policy_digest", "first_received_at",
                "first_reply_accepted_at", "resolved_at", "reopen_count", "related", "opened_by", "synthetic", "note",
-               "page_url"}
+               "page_url", "origin"}
 
 
 def create_case(conn, *, prefix: str, **fields) -> dict:

@@ -100,7 +100,7 @@ def release(hub_dir: Path, ref: str, actor: Actor) -> dict:
 
 # -- replies -------------------------------------------------------------------------------
 
-def edit_reply(hub_dir: Path, ref: str, actor: Actor, body: str) -> dict:
+def edit_reply(hub_dir: Path, ref: str, actor: Actor, body: str, *, keep_attachments: bool = True) -> dict:
     """A person's own revision. It may use fact placeholders. Values they type
     are flagged, and checks 1, 2, 3, 6, 7 and 9 run."""
     require(actor, "desk_operator")
@@ -114,13 +114,14 @@ def edit_reply(hub_dir: Path, ref: str, actor: Actor, body: str) -> dict:
     if base is None:
         raise ActionError("state_conflict", "There is no reply to edit yet. Rerun the case first.")
     res = store.get_resolution(conn, case["id"], base["resolution"])
+    attachments = base["attachments"] if keep_attachments else []
     facts = {f["fact_id"]: f for f in store.get_facts(conn, case["id"], base["resolution"])}
     rendered = render.render(body, facts, sender_name=render.safe_name(case["sender_display"]),
                              observed=facts_lib.display("date", (next(iter(facts.values()))["observed_at"]
                                                                  if facts else "2000-01-01")[:10]), strict=False)
     outcomes = res["requests"]
     result = checks.run(case=case, source=body, rendered=rendered, facts=facts, policy=loaded.policy,
-                        author_kind="person", outcomes=outcomes, resolver_outcomes=None, attachments=base["attachments"],
+                        author_kind="person", outcomes=outcomes, resolver_outcomes=None, attachments=attachments,
                         language=base["language"], current_digests=loaded.digests(), used_digests=loaded.digests(),
                         decisions=store.case_decisions(conn, case["id"]))
     with store.tx(hub_dir) as tconn:
@@ -129,12 +130,12 @@ def edit_reply(hub_dir: Path, ref: str, actor: Actor, body: str) -> dict:
             if old["state"] in ("ready", "requested", "mailbox_draft_saved", "helpdesk_draft_saved"):
                 store.set_reply_state(tconn, case["id"], old["revision"], "superseded")
         dg = render.digest(case_id=case["id"], reply_revision=rev, body=rendered, subject=base["subject"],
-                           recipients=base["recipients"], attachments=base["attachments"],
+                           recipients=base["recipients"], attachments=attachments,
                            policy_digest=loaded.policy.digest, fact_sheet_digest=res["fact_sheet_digest"],
                            origin={"channel": case["channel_id"], "thread": case["thread_key"]})
         reply = store.save_reply(tconn, case["id"], rev, resolution=base["resolution"], author_kind="person",
                                  author=actor.email, source_md=body, rendered=rendered, language=base["language"],
-                                 recipients=base["recipients"], subject=base["subject"], attachments=base["attachments"],
+                                 recipients=base["recipients"], subject=base["subject"], attachments=attachments,
                                  digest=dg, checks={"results": result["checks"], "passed": result["passed"],
                                                     "style": checks.style_notes(rendered, loaded.style)},
                                  typed_values=result["typed_values"], state="ready")
@@ -145,9 +146,16 @@ def edit_reply(hub_dir: Path, ref: str, actor: Actor, body: str) -> dict:
 
 
 def _mode(hub_dir: Path, channel: str | None) -> str:
+    """The reply mode for this channel. A Hubzoid email channel also performs
+    email.send, so the stricter of the two applies, as Hubzoid enforces."""
     from hubzoid.work_items import config as wi_config
 
-    return wi_config.mode_for(wi_config.load(hub_dir), ["customer_reply.send"], channel)
+    from . import replies
+
+    acts = ["customer_reply.send"]
+    if channel and channel not in replies.SAMPLE_CHANNELS and replies.channel_kind(channel) == "email":
+        acts.append("email.send")
+    return wi_config.mode_for(wi_config.load(hub_dir), acts, channel)
 
 
 def _current_reply(hub_dir: Path, case: dict, reply_revision: int, digest: str) -> dict:
@@ -190,6 +198,15 @@ def _stale_facts(hub_dir: Path, case: dict, reply: dict) -> list[dict]:
         raise ActionError(exc.code, f"ERPNext could not be reread ({exc.message}). Nothing was sent.", 503) from None
 
 
+def _origin(case: dict, actor: Actor) -> dict:
+    """A reply on a Hubzoid channel goes back on the case's stored thread. The
+    person asking is who acts and who approves."""
+    origin = case.get("origin") or {}
+    if origin.get("surface") != "channel":
+        return {}
+    return {"origin": dict(origin, acts_as=actor.email, released_by=origin.get("released_by"))}
+
+
 def request_send(hub_dir: Path, ref: str, actor: Actor, *, reply_revision: int, digest: str,
                  expected_revision: int | None, start) -> dict:
     """Ask Hubzoid to send the exact reply after the requester approves it."""
@@ -210,6 +227,10 @@ def request_send(hub_dir: Path, ref: str, actor: Actor, *, reply_revision: int, 
         raise ActionError("write_mode_" + mode.replace("direct", "off"), f"Replies on {case['channel_id']} are in "
                           f"{mode} mode. Sending needs customer_reply.send: approve in work-items.yaml.", 403)
     reply = _current_reply(hub_dir, case, reply_revision, digest)
+    if (case.get("origin") or {}).get("surface") == "channel" and reply["attachments"]:
+        raise ActionError("attachments_unsupported", "Replies through a Hubzoid channel carry text only, and this reply "
+                          "attaches " + ", ".join(a["name"] for a in reply["attachments"]) + ". Save it as a draft "
+                          "in the mailbox, or edit the reply to send it without the attachment.", 422)
     _plan_ok(hub_dir, case)
     stale = _stale_facts(hub_dir, case, reply)
     if stale:
@@ -219,7 +240,7 @@ def request_send(hub_dir: Path, ref: str, actor: Actor, *, reply_revision: int, 
                           + ". A new revision is being drafted. Review it.", stale=stale)
     item = start("customer_desk_case", key=f"send:{case['id']}:{reply['revision']}", route="send",
                  input={"action": "send", "case_id": case["id"], "reply_revision": reply["revision"],
-                        "digest": reply["digest"]}, requester=actor.email)
+                        "digest": reply["digest"]}, requester=actor.email, **_origin(case, actor))
     with store.tx(hub_dir) as conn:
         store.set_reply_state(conn, case["id"], reply["revision"], "requested")
         store.upsert_send(conn, case["id"], reply["revision"], "approve", synthetic=case["synthetic"],
@@ -246,7 +267,7 @@ def save_draft(hub_dir: Path, ref: str, actor: Actor, *, reply_revision: int, di
     reply = _current_reply(hub_dir, case, reply_revision, digest)
     item = start("customer_desk_case", key=f"draft:{case['id']}:{reply['revision']}", route="draft",
                  input={"action": "draft", "case_id": case["id"], "reply_revision": reply["revision"],
-                        "digest": reply["digest"]}, requester=actor.email)
+                        "digest": reply["digest"]}, requester=actor.email, **_origin(case, actor))
     with store.tx(hub_dir) as conn:
         store.upsert_send(conn, case["id"], reply["revision"], "draft", synthetic=case["synthetic"],
                           work_item_id=item["id"], status="saving", requested_by=actor.email)
@@ -515,3 +536,32 @@ def open_internal(hub_dir: Path, actor: Actor, *, customer_id: str, text: str, s
     item = start("customer_desk_intake", key=f"internal:{opened['case_id']}:{opened['seq']}", route="triage",
                  input={"kind": "case", "case_id": opened["case_id"], "seq": opened["seq"]}, requester=actor.email)
     return {"case": opened["number"], "state": "triaging", "work_item_id": item["id"]}
+
+
+def preview(hub_dir: Path, actor: Actor, *, customer_id: str, text: str, start) -> dict:
+    """Prepare a reply to a pasted message for a named customer, in a separate
+    preview namespace: it never shows in the queue, has no recipient and can
+    never be sent or drafted anywhere."""
+    require(actor, "desk_operator")
+    cust = _customer(hub_dir, customer_id)
+    if cust["fields"].get("disabled"):
+        raise ActionError("binding_conflict", f"Customer {customer_id} is disabled in ERPNext.", 422)
+    ref = hashlib.sha256(f"preview:{actor.email}:{customer_id}:{text}:{time.time()}".encode()).hexdigest()[:16]
+    env = envelopes.internal(surface="chat", customer_id=customer_id, text=text, opened_by=actor.email, source_ref=ref)
+    env["preview"] = True
+    opened = cases.intake(hub_dir, env)
+    item = start("customer_desk_intake", key=f"preview:{opened['case_id']}", route="triage",
+                 input={"kind": "case", "case_id": opened["case_id"], "seq": opened["seq"]}, requester=actor.email)
+    return {"preview": opened["number"], "case_id": opened["case_id"], "work_item_id": item["id"]}
+
+
+def preview_result(hub_dir: Path, case_id: str) -> dict:
+    from . import policy as policy_lib, views
+
+    view = views.case(hub_dir, case_id)
+    cv = views.compact(view)
+    values = config.settings(hub_dir)
+    gaps = policy_lib.gaps(policy_lib.load(hub_dir, values["DESK_POLICY_FILE"]))
+    return {"state": cv["state"], "requests": cv["requests"], "classification": cv["classification"],
+            "facts": cv["facts"], "reply": cv["reply"], "policy_gaps": gaps,
+            "note": "Preview only. No case in the queue, no draft and no send."}

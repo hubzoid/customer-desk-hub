@@ -53,9 +53,12 @@ class SampleBackend:
     name = "sample"
     synthetic = True
 
-    def __init__(self, dataset_dir: Path, *, company: str):
+    def __init__(self, dataset_dir: Path, *, company: str, overlay: Path | None = None):
         self.dir = Path(dataset_dir)
         self.company = company
+        # Edits a person makes "in ERPNext" during a sample demo, kept outside the
+        # immutable dataset: {resource: {record id: {field: value}}}.
+        self.overlay = json.loads(overlay.read_text()) if overlay and overlay.is_file() else {}
         manifest = self.dir / "manifest.json"
         if not manifest.is_file():
             raise ERPError("config_invalid", f"No sample dataset at {self.dir}. Install it first.", status=422)
@@ -65,7 +68,13 @@ class SampleBackend:
     def _rows(self, resource: str) -> list[dict]:
         if resource not in self._cache:
             path = self.dir / FILES[resource]
-            self._cache[resource] = json.loads(path.read_text()) if path.is_file() else []
+            rows = json.loads(path.read_text()) if path.is_file() else []
+            edits = self.overlay.get(resource) or {}
+            for row in rows:
+                for field, value in (edits.get(row["name"]) or {}).items():
+                    row[field] = value
+                    row["modified"] = "2000-01-15T12:00:00Z"
+            self._cache[resource] = rows
         return self._cache[resource]
 
     def _wrap(self, resource: str, raw: dict) -> dict:

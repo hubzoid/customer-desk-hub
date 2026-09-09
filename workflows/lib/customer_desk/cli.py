@@ -152,10 +152,28 @@ def wait_settled(hub_dir: Path, timeout: int) -> None:
         time.sleep(2)
 
 
+def cmd_sample_erp_set(args, hub_dir):
+    """Stand in for a person editing ERPNext during a sample demo."""
+    values = config.settings(hub_dir)
+    cfg = erp_config.load(hub_dir)
+    if config.namespace(values) != "sample" or cfg.backend != "sample":
+        return fail(args, "desk_setting_invalid", "erp-set changes only the sample ERP, in sample mode.")
+    path = erp_config.sample_overlay(hub_dir)
+    data = json.loads(path.read_text()) if path.is_file() else {}
+    data.setdefault(args.resource, {}).setdefault(args.record, {})[args.field] = json.loads(args.value) \
+        if args.value[:1] in "[{\"" or args.value in ("true", "false", "null") else args.value
+    path.write_text(json.dumps(data, indent=2))
+    return out(args, data, f"SAMPLE ERP: {args.resource} {args.record}.{args.field} is now {args.value} "
+                           "(as if a person changed it in ERPNext).")
+
+
 def cmd_sample_reset(args, hub_dir):
     values = config.settings(hub_dir)
     if config.namespace(values) != "sample":
         return fail(args, "desk_setting_invalid", "Reset works only in sample mode. It never touches live cases.")
+    overlay = erp_config.sample_overlay(hub_dir)
+    if overlay.exists():
+        overlay.unlink()
     with store.tx(hub_dir) as conn:
         counts = store.reset_namespace(conn, "sample")
     for f in store.db_path(hub_dir).parent.glob("fault-*.used"):
@@ -261,7 +279,8 @@ def cmd_act(args, hub_dir):
     elif v == "release":
         r = actions.release(hub_dir, args.case, actor)
     elif v == "edit-reply":
-        r = actions.edit_reply(hub_dir, args.case, actor, Path(args.file).read_text())
+        r = actions.edit_reply(hub_dir, args.case, actor, Path(args.file).read_text(),
+                               keep_attachments=not args.no_attachments)
     elif v == "rerun":
         r = actions.rerun(hub_dir, args.case, actor, instruction=args.instruction, start=start)
         if args.wait:
@@ -361,6 +380,19 @@ def cmd_stop(args, hub_dir):
     return out(args, {"stop_writes": flag.exists()}, f"Helpdesk writes {'stopped' if flag.exists() else 'allowed'}.")
 
 
+def cmd_preview(args, hub_dir):
+    actor = local_actor(hub_dir, args.as_)
+    text = Path(args.text_file).read_text()
+    started = actions.preview(hub_dir, actor, customer_id=args.customer, text=text, start=starter(hub_dir))
+    wait_settled(hub_dir, args.wait)
+    r = actions.preview_result(hub_dir, started["case_id"])
+    lines = [r["note"], ""] + [f"request {q['no']}: {q['category']} -> {q['outcome']}" for q in r["requests"]]
+    if r["reply"]:
+        lines += ["", r["reply"]["text"], "", "Checks: " + ", ".join(r["reply"]["checks"])]
+    lines += [""] + [f"policy gap: {g['message']}" for g in r["policy_gaps"]]
+    return out(args, r, "\n".join(lines))
+
+
 def cmd_transcript(args, hub_dir):
     actor = local_actor(hub_dir, args.as_)
     text = Path(args.file).read_text()
@@ -378,7 +410,11 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("sample", help="load or reset the synthetic sample")
-    s.add_argument("verb", choices=["load", "reset"])
+    s.add_argument("verb", choices=["load", "reset", "erp-set"])
+    s.add_argument("resource", nargs="?")
+    s.add_argument("record", nargs="?")
+    s.add_argument("field", nargs="?")
+    s.add_argument("value", nargs="?")
     s.add_argument("--file", default="fixtures/intake/customer-desk-20.jsonl")
     s.add_argument("--only", default=None, help="comma separated provider event ids")
     s.add_argument("--via-helpdesk", action="store_true", help="send the helpdesk-routed requests through the fake Zoho Desk")
@@ -415,6 +451,7 @@ def main(argv=None) -> int:
         p.add_argument("--approve", action="store_true")
         p.add_argument("--note")
         p.add_argument("--wait", type=int, default=0)
+        p.add_argument("--no-attachments", action="store_true")
         p.set_defaults(handler=cmd_act, verb=verb)
 
     for area, verbs in (("delivery", ["verify", "decline"]), ("exception", ["decide"]), ("tickets", ["list", "update"])):
@@ -435,6 +472,10 @@ def main(argv=None) -> int:
     sub.add_parser("ledger", help="helpdesk writes, including dry-run and shadow previews")
     st = sub.add_parser("stop-writes", help="the helpdesk stop switch, read at the moment of each write")
     st.add_argument("state", choices=["on", "off"])
+    pv = sub.add_parser("preview", help="a reply to a pasted message, without a case or a send")
+    pv.add_argument("--customer", required=True)
+    pv.add_argument("--text-file", required=True)
+    pv.add_argument("--wait", type=int, default=300)
     tr = sub.add_parser("transcript")
     tr.add_argument("verb", choices=["import"])
     tr.add_argument("--file", required=True)
@@ -445,10 +486,11 @@ def main(argv=None) -> int:
     if not (hub_dir / "AGENTS.md").is_file():
         print(f"{hub_dir} is not a hub folder.", file=sys.stderr)
         return 2
-    handlers = {"sample": lambda a, h: cmd_sample_load(a, h) if a.verb == "load" else cmd_sample_reset(a, h),
+    handlers = {"sample": lambda a, h: {"load": cmd_sample_load, "reset": cmd_sample_reset,
+                                        "erp-set": cmd_sample_erp_set}[a.verb](a, h),
                 "bindings": cmd_bindings, "list": cmd_list, "show": cmd_show, "policy": cmd_policy,
                 "metrics": cmd_metrics, "outbox": cmd_outbox, "ledger": cmd_ledger, "stop-writes": cmd_stop,
-                "transcript": cmd_transcript}
+                "transcript": cmd_transcript, "preview": cmd_preview}
     handler = getattr(args, "handler", None) or handlers[args.cmd]
     try:
         return handler(args, hub_dir) or 0

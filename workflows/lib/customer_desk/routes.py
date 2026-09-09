@@ -5,5 +5,7 @@ from hubzoid.work_items import Route
 #: draft mode) and annotate a helpdesk ticket. In approve mode nothing is sent,
 #: because unattended work has no person to approve.
 TRIAGE = Route(stages=None, actions=("customer_reply.send", "helpdesk.annotate"))
-SEND = Route(stages=None, actions=("customer_reply.send",))
-DRAFT = Route(stages=None, actions=("customer_reply.send",))
+#: A reply on a Hubzoid email channel also performs email.send, which the
+#: channel adds itself, so the stricter of the two write modes applies.
+SEND = Route(stages=None, actions=("customer_reply.send", "email.send"))
+DRAFT = Route(stages=None, actions=("customer_reply.send", "email.send"))

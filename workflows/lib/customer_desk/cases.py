@@ -38,7 +38,7 @@ def intake(hub_dir: Path, env: dict) -> dict:
     `created`, `appended`, `reopened` or `duplicate`."""
     hub_dir = Path(hub_dir)
     values = config.settings(hub_dir)
-    ns = config.namespace(values)
+    ns = "preview" if env.get("preview") else config.namespace(values)
     surface = env["surface"]
     if surface not in SURFACES:
         raise IntakeError("invalid_request", f"surface must be one of {', '.join(SURFACES)}.")
