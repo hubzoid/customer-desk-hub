@@ -14,8 +14,12 @@ from pathlib import Path
 OWNER = "admin@localhost"
 
 ENGINE = textwrap.dedent('''
-    import sys, time
+    import os, sys, time
     from pathlib import Path
+    if os.environ.get("DESK_TEST_FAKE_MAIL"):
+        sys.path.insert(0, os.environ["DESK_TESTS_DIR"])
+        import fake_mail
+        fake_mail.install()
     from hubzoid.workflows import runtime
     runtime.init(sys.argv[1], hub_name=Path(sys.argv[1]).name)
     runtime.load_workflows(sys.argv[1])
@@ -40,7 +44,8 @@ class Engine:
         script.write_text(ENGINE)
         self.log = tmp / f"engine-{time.time_ns()}.log"
         self.out = self.log.open("w")
-        full = {**os.environ, "DESK_SCRIPTED_STATIONS": "1", **(env or {})}
+        full = {**os.environ, "DESK_SCRIPTED_STATIONS": "1", "DESK_TESTS_DIR": str(Path(__file__).parent),
+                **(env or {})}
         self.proc = subprocess.Popen([sys.executable, str(script), str(hub), str(self.stop)], stdout=subprocess.PIPE,
                                      stderr=self.out, text=True, env=full)
         deadline = time.time() + 90
