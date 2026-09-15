@@ -1,0 +1,2 @@
+# The Customer Desk runs on Hubzoid 2.0 and adds one library.
+babel>=2.14,<3

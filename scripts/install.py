@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ["AGENTS.md", "settings.yaml", "hub.settings.yaml", "hub.manifest.yaml", "work-items.yaml", "hitl.yaml",
          "mcp-apps.yaml", "desk", "knowledge", "agents", "workflows", "tools_local", "restricted", "connectors",
-         "cards", "identity", "doctor", "fixtures", "evals", "skills", "channels", "LICENSE", "NOTICE", "README.md"]
+         "cards", "identity", "doctor", "fixtures", "evals", ".claude", "channels", "docs", "requirements.txt", "ARCHITECTURE.md", "LICENSE", "NOTICE", "README.md"]
 
 
 def main() -> int:

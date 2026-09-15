@@ -1,0 +1,16 @@
+Customer Desk, a ready-made Hubzoid hub
+Copyright 2026 Hubzoid
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Method credits (no code copied):
+- The eval method follows Sierra's tau-bench and tau2-bench (MIT): simulated customer
+  conversations graded on final state and delivered facts, repeated for pass^k.
+- The policy-as-rules and approved reply templates design draws on Parlant (Apache-2.0).
+- The workflow step order draws on the Mastra customer support and refund agent template
+  (Apache-2.0), without its automatic reply delivery.
+
+ERPNext and Frappe are separate GPL-3.0 applications. This hub talks to them over their
+REST API only and includes none of their code. Zoho Desk is a trademark of Zoho Corporation.
+The fake Zoho Desk and fake Frappe servers in this repository are test doubles written for
+this hub.

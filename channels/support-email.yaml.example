@@ -1,0 +1,23 @@
+# A real support mailbox for the desk, through Hubzoid's email channel.
+# Copy to channels/support-email.yaml, fill in the mailbox, then apply it:
+#   hubzoid channels apply . --file channels/support-email.yaml --check
+#   hubzoid channels apply . --file channels/support-email.yaml --expected-revision absent
+# Add support-email to DESK_EXTERNAL_CHANNELS in hub.settings.yaml.
+version: 1
+id: support-email
+provider: email
+enabled: true
+workflow: customer_desk_intake
+run_as: workflow
+provider_config:
+  transport: imap
+  mailbox: support@your-company.example
+  imap: {host: imap.your-company.example, port: 993, tls: implicit, username: support@your-company.example,
+         password_ref: "secret:hub/customer-desk/support-mailbox"}
+  smtp: {host: smtp.your-company.example, port: 465, tls: implicit, username: support@your-company.example,
+         password_ref: "secret:hub/customer-desk/support-mailbox"}
+  sender_policy:
+    allowed: []            # ./desk bindings export lists the bound addresses to put here
+    authentication: aligned_dkim
+    unknown: quarantine
+  attachments: {max_count: 10, max_each_bytes: 10485760, max_total_bytes: 20971520}
