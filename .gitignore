@@ -11,3 +11,4 @@ __pycache__/
 /data/
 /sample-outbox/
 /var/
+.tools/
