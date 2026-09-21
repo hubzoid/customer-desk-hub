@@ -38,7 +38,8 @@ def digest(view: dict) -> str:
     body = {"state": c["state"], "revision": c["revision"], "reply": (view.get("reply") or {}).get("digest"),
             "tickets": [(t["number"], t["state"]) for t in view["tickets"]],
             "proposals": [(p["id"], p["state"]) for p in view["proposals"]],
-            "decisions": [(d["id"], d["state"]) for d in view["decisions"]]}
+            "decisions": [(d["id"], d["state"]) for d in view["decisions"]],
+            "plans": [(p["version"], p["state"]) for p in view.get("plans") or []]}
     return "sha256:" + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
 
 
@@ -123,6 +124,10 @@ def render(view: dict) -> str:
             parts.append(f"<div class=card><b>Exception decision</b> {_e(d['kind'])} &middot; {_e(d['state'])}"
                          f"{' by ' + _e(d['decided_by']) if d.get('decided_by') else ''}<br><small>"
                          f"{_e(json.dumps(d['inputs']))}</small></div>")
+    for p in (view.get("plans") or [])[-2:]:
+        parts.append(f"<h2>Escalation plan, version {p['version']}</h2><div class=card><b>{_e(p['state'])}</b> "
+                     f"&middot; by {_e(p['author'])}{' &middot; reviewed by ' + _e(p['reviewer']) if p.get('reviewer') else ''}"
+                     f"<p>{_e(p['body'])}</p><small>Digest {_e(p['digest'])}</small></div>")
     if view["sends"]:
         parts.append("<h2>Drafts and sends</h2><table><tr><th>Reply</th><th>Mode</th><th>Status</th><th>Receipt</th></tr>")
         for s in view["sends"]:

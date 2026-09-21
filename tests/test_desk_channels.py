@@ -166,3 +166,44 @@ def test_unknown_sender_waits_in_intake_until_a_person_releases_it(channel, tmp_
         raise AssertionError("the released message did not become a case")
     finally:
         engine.close()
+
+
+def test_a_policy_change_after_approval_stops_the_email_reply(channel, tmp_path):
+    """hub.thread.post takes no dispatch hook, so the desk checks right before
+    posting, also when the work resumes after the approval."""
+    from hubzoid.channels.email import poller
+    from hubzoid.intake import service as intake
+    from hubzoid.work_items import service as wi
+    from hubzoid.work_items import store as wi_store
+
+    from customer_desk import actions, store
+    from customer_desk.flows import start_work
+
+    hub, conn, mail = channel
+    engine = Engine(hub, tmp_path)
+    try:
+        poller.process(conn, {"id": "3", "raw": message(BOUND, "Order", "Where is order SYN-SO-0001?",
+                                                      "<so-1@synthetic-harbor.example>")})
+        route(hub)
+        [item] = intake.list_items(hub)["items"]
+        deadline = time.time() + 120
+        case = None
+        while time.time() < deadline and case is None:
+            row = store.connect(hub).execute("SELECT number FROM cases WHERE intake_id=?", (item["id"],)).fetchone()
+            case = row and wait_case(hub, row["number"], ("needs_owner",))
+            time.sleep(0.5)
+        owner = actions.Actor(OWNER, lambda r: True)
+        actions.claim(hub, case["number"], owner)
+        reply = store.get_reply(store.connect(hub), case["id"], case["current_reply"])
+        out = actions.request_send(hub, case["number"], owner, reply_revision=reply["revision"],
+                                   digest=reply["digest"], expected_revision=None, start=start_work(hub))
+        op = waiting_op(hub, out["work_item_id"])
+        policy = hub / "knowledge" / "desk-policy.md"
+        policy.write_text(policy.read_text() + "\nR19. Mention the order date in every status reply.\n")
+        wi.approve(hub, op["id"], OWNER, digest=op["args_digest"])
+        wait_item(hub, out["work_item_id"], ("completed",))
+        assert not (mail.exists() and list(mail.glob("sent-*.json")))          # nothing left
+        assert wi_store.get_op(hub, op["id"])["state"] == "abandoned"
+        assert store.get_reply(store.connect(hub), case["id"], reply["revision"])["state"] == "superseded"
+    finally:
+        engine.close()

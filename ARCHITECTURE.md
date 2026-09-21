@@ -43,8 +43,10 @@ message (sample channel, Hubzoid email or WhatsApp channel, Zoho Desk ticket, ch
      read tools, which take their case from the running work item, never from the model.
   -> render and check (code): the ten checks. A failure goes back to the resolver.
   -> review (station): an independent check of every claim. "revise" goes back to the resolver.
-     At most two revisions. If the model cannot produce a safe draft, the approved templates are used.
-  -> ready: needs_owner in the operators, delivery, complaints or decisions queue, with a case page.
+     At most two revisions. If the model cannot produce a draft that passes every check, the approved templates,
+     written from the decided outcomes, are used.
+  -> ready: needs_owner in the operators, delivery, complaints or decisions queue, with a case page that only
+     desk role holders can open. A triage overtaken by a newer message or triage publishes nothing.
   -> helpdesk write-back (Zoho Desk cases): tags, private note, case field, unsent draft.
 ```
 
@@ -62,19 +64,19 @@ On every reply revision: `binding_ok`, `facts_owned`, `placeholders_resolve`, `n
 | `draft` | sample mailbox draft | refused (no drafts) | unsent draft reply | mailbox draft (after `hubzoid channels email rehearse-draft`) |
 | `approve` | sample outbox after the requester approves | sample outbox after approval, held outside the 24 hour window | refused (a person sends in the helpdesk) | reply on the stored thread after approval, text only |
 
-An approved send is one Hubzoid operation. Before it leaves, the dispatch rereads every ERPNext fact the reply uses and checks the reply is still current and the policy and style are unchanged. Any difference refuses the send and drafts a new revision. A send whose outcome is unknown becomes `ambiguous` and waits for the requester to say done, retry or abandon. It is never resent on its own.
+An approved send is one Hubzoid operation. Before it leaves, the dispatch rereads every ERPNext fact the reply uses (a statement relists its period, so a payment or a new invoice counts) and checks that the reply is still current, the sender still resolves to the same customer, the requester still holds the case and the desk operator role, and the policy and style are unchanged. Any difference refuses the send and drafts a new revision. `hub.thread.post` takes no dispatch hook, so for a Hubzoid channel the same check runs right before the post, both on the first run and when the work resumes after the approval, and a failed check abandons the approved post. The post names `customer_reply.send` as well as the channel's own action, so the stricter mode applies. Unattended helpdesk triage writes a draft only when `customer_reply.send` is `draft` for `zoho_desk`, so it never parks. A send whose outcome is unknown becomes `ambiguous` and waits for the requester to say done, retry or abandon. It is never resent on its own.
 
 ## The helpdesk
 
-`helpdesk/zoho.py` has a read client that only sends GET and a write client whose one request method allows exactly five calls: prefixed tags, private notes carrying the desk marker, one configured case field, an unsent draft reply carrying the marker, and uploads for that draft. The stop switch (`./desk stop-writes on` or `DESK_STOP_WRITES=1`) and the mode are read at the moment of each write. Webhook bodies only name a ticket. The desk rereads it, handles each inbound message once, and ignores the ticket changes its own writes cause.
+`helpdesk/zoho.py` has a read client that only sends GET and a write client whose one request method allows exactly five calls: prefixed tags, private notes carrying the desk marker, one configured case field, an unsent draft reply carrying the marker, and uploads for that draft. The stop switch (`./desk stop-writes on` or `DESK_STOP_WRITES=1`) is read at the moment of each write, and is the instant control. The mode and the draft switch are checked at each write too, against the settings in force (Hubzoid reads hub settings when the process starts, so a mode change applies after a restart). A recovery check counts a write as not made only when it read the ticket's whole listing. Webhook bodies only name a ticket. The desk rereads it, handles each inbound message once, and ignores the ticket changes its own writes cause.
 
 ## Identity and roles
 
-Teammates sign in to Hubzoid. Desk roles are capabilities granted per person: `desk_operator`, `desk_delivery`, `desk_complaints`, `desk_exceptions`, `desk_bindings`. Customers never sign in and can never approve anything. A sender is who the channel verified, matched to one ERP customer by a binding a person made.
+Teammates sign in to Hubzoid. Desk roles are capabilities granted per person: `desk_operator`, `desk_delivery`, `desk_complaints`, `desk_exceptions`, `desk_bindings`. Customers never sign in and can never approve anything. A sender is who the channel verified, matched to one ERP customer by a binding a person made. The binding is resolved again on every triage, every station read and every send (`scope.py`): a revoked or contested binding stops every read at once, and a case never reads under a customer id it stored earlier. Another sender on the same thread or ticket gets a case of their own.
 
 ## Data
 
-The desk's own records live in `.hubzoid/data/customer-desk.sqlite` in the hub's data folder, which Hubzoid backups include: cases, events, resolutions, facts, reply revisions with their checks, sends, tickets, proposals, decisions, plans, bindings, the helpdesk write ledger and the sample outbox. Resolutions, facts and reply revisions are never changed after they are written. Sample and live cases are kept in separate namespaces.
+The desk's own records live in `.hubzoid/data/customer-desk.sqlite` in the hub's data folder, which Hubzoid backups include: cases, events, resolutions, facts, reply revisions with their checks, sends, tickets, proposals, decisions, plans, bindings, the helpdesk write ledger and the sample outbox. A triage reserves its resolution number when it starts and fills it once. Facts and reply revisions are never changed after they are written. Sample and live cases are kept in separate namespaces, and case and ticket numbers are one sequence across them.
 
 ## ERPNext
 

@@ -14,6 +14,7 @@ OVERLAP_MINUTES = 15
 LOOKBACK_MINUTES = 60
 PAGE = 100
 MAX_PAGES = 10
+MAX_OFFSET = 4900       # Zoho Desk's search offset limit
 
 
 def ticket_id_from(body) -> str | None:
@@ -54,6 +55,11 @@ def poll() -> dict:
     if values["DESK_HELPDESK"] != "zoho_desk" or not values["DESK_INTAKE_ENABLED"]:
         return {"state": "off"}
     reader, _ = desk.readers(hub_dir, values)
+    return poll_once(hub_dir, values, reader, start_work(hub_dir))
+
+
+def poll_once(hub_dir: Path, values: dict, reader, start) -> dict:
+    """One look for modified tickets, from the stored cursor or window."""
     conn = store.connect(hub_dir)
     now = dt.datetime.now(dt.timezone.utc)
     row = conn.execute("SELECT value FROM cursor WHERE name='zoho_poll'").fetchone()
@@ -62,7 +68,6 @@ def poll() -> dict:
                                                  - dt.timedelta(minutes=OVERLAP_MINUTES)),
                                    "end": _iso(now), "offset": 0}
     started = []
-    start = start_work(hub_dir)
     for _ in range(MAX_PAGES):
         page = reader.modified(window["start"], window["end"], offset=window["offset"], limit=PAGE,
                                department_id=values.get("ZOHO_DESK_DEPARTMENT_ID") or None)
@@ -78,6 +83,11 @@ def poll() -> dict:
         if len(page) < PAGE:
             cur = {"cursor": window["end"]}
             break
+        if window["offset"] + PAGE > MAX_OFFSET and page[-1].get("modifiedTime"):
+            # Zoho search cannot page past 5000. Results come oldest first, so
+            # the window starts again at the last ticket read; tickets seen
+            # twice are skipped by their recorded modified time.
+            window = {"start": page[-1]["modifiedTime"], "end": window["end"], "offset": 0}
         cur = {"cursor": cur.get("cursor"), "window": window}
     with store.tx(hub_dir) as tconn:
         tconn.execute("INSERT INTO cursor(name, value) VALUES ('zoho_poll', ?) ON CONFLICT(name) DO UPDATE SET "

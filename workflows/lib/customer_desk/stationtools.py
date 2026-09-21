@@ -9,9 +9,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import facts as facts_lib, gather, policy as policy_lib, store
+from . import facts as facts_lib, gather, policy as policy_lib, scope, store
 from .erpnext import config as erp_config
-from .erpnext.contract import ERPContext, ERPError
+from .erpnext.contract import ERPError
 
 MAX_CODES = 20
 
@@ -30,9 +30,12 @@ def _context(hub_dir: Path):
         raise NoCase("This tool runs only inside a desk triage, for its own case.")
     case = store.get_case(conn, row["case_id"])
     cfg = erp_config.load(hub_dir)
+    try:
+        # Decided at every call: a binding revoked or contested mid-run stops the reads at once.
+        ctx = scope.erp_context(hub_dir, case, principal="desk-resolver", cfg=cfg)
+    except scope.ScopeError as exc:
+        raise NoCase(exc.message) from None
     erp = erp_config.backend(hub_dir, cfg)
-    ctx = ERPContext(hub_id=Path(hub_dir).name.lower(), company=cfg.company, party_scope=case["customer_id"],
-                     principal="desk-resolver", warehouses=cfg.warehouses)
     existing = store.get_facts(conn, case["id"], row["resolution"])
     start = max([int(f["fact_id"][1:]) for f in existing] or [0]) + 1
     sheet = facts_lib.FactSheet(observed_at=existing[0]["observed_at"] if existing else "", backend=erp.name,

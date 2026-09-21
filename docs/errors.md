@@ -20,9 +20,13 @@ DRAFT for review. Every refusal has a stable code, a safe message and the next s
 | `permission_denied` | You do not hold the desk role this needs. | Ask the agent's manager. |
 | `claim_required`, `claim_conflict` | The case is not yours, or someone else holds it (shown with since when). | Claim it, or ask them. |
 | `revision_conflict`, `state_conflict` | The case changed since you loaded it. | Reload. |
-| `reply_stale` | Facts, policy, style or the thread changed after the draft. Nothing was sent. | Review the new revision. |
+| `reply_stale` | Facts, policy, style, the sender's binding or the thread changed after the draft. Nothing was sent. | Review the new revision. |
+| `claim_lost`, `role_lost` | By the time you approved, you no longer held the case or the desk operator role. Nothing was sent. | Claim the case again and ask to send. |
+| `recipient_changed` | The helpdesk ticket's contact is no longer the case's bound sender. No draft was written. | Check the ticket in the helpdesk. |
+| `request_failed` | A send or draft request did not reach Hubzoid. Nothing was sent. | Ask again. |
 | `checks_failed` | The reply fails a check. | Edit it or rerun. |
 | `plan_required` | An escalated case needs a reviewed plan before a send. | Share a plan for the complaints team. |
+| `plan_stale` | The plan waiting for review is not the version you read. | Read the current plan on the case and review that one. |
 | `write_mode_off`, `write_mode_draft` | The channel's reply mode does not allow this. | Change `customer_reply.send` in `work-items.yaml`. |
 | `mode_unsupported` | WhatsApp has no drafts, an internal case has no recipient, or a helpdesk reply is sent in the helpdesk. | Use the path the message names. |
 | `human_action_required` | A send waits for you to approve the exact reply. | Open the Work items page. |

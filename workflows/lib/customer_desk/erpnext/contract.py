@@ -99,6 +99,17 @@ def record(resource: str, raw: dict, *, backend: str, synthetic: bool, company: 
             "source": {"doctype": doctype, "name": raw["name"], "fields": list(allowed)}}
 
 
+class Records(list):
+    """A list read. `truncated` is true when more matching records exist than
+    were returned, so a caller never presents a partial list as complete."""
+
+    truncated: bool = False
+
+    def __init__(self, items=(), truncated: bool = False):
+        super().__init__(items)
+        self.truncated = truncated
+
+
 def in_scope(resource: str, raw: dict, context: ERPContext) -> bool:
     """Whether a raw record is visible to this context."""
     if resource not in context.allowed_resources:

@@ -36,11 +36,8 @@ def readers(hub_dir: Path, values: dict, *, transport=None) -> tuple[zoho.Reader
     state = store.db_path(hub_dir).parent / "zoho"
     reader = zoho.Reader(zoho.credentials(hub_dir, values, write=False), state_dir=state, transport=transport)
     writer = None
-    mode = values["DESK_HELPDESK_MODE"]
-    if mode in ("shadow", "live"):
-        policy = zoho.WritePolicy(mode=mode, tag_prefix=values["ZOHO_DESK_TAG_PREFIX"],
-                                  allow_drafts=bool(values["DESK_HELPDESK_DRAFTS"]) and mode == "live",
-                                  case_field=values.get("ZOHO_DESK_CASE_FIELD") or None)
+    policy = zoho.policy_from(values)
+    if policy is not None:
         writer = zoho.Writer(zoho.credentials(hub_dir, values, write=True), policy, hub_dir=hub_dir, state_dir=state,
                              transport=transport)
     return reader, writer
@@ -70,28 +67,32 @@ def read_ticket(reader: zoho.Reader, ticket_id: str) -> dict:
     return {"ticket": ticket, "threads": threads, "inbound": message}
 
 
-def claim_message(hub_dir: Path, ticket: dict, inbound_id: str) -> bool:
-    """True the first time this inbound message is seen. The desk's own tag
-    and draft writes change the ticket's modified time, and this check is what
-    stops them from starting a new case loop."""
+def claim_message(hub_dir: Path, ticket: dict, inbound_id: str, *, owner: str | None = None) -> bool:
+    """True the first time this inbound message is seen, and again for the
+    same work item replaying after a crash before the case was linked. The
+    desk's own tag and draft writes change the ticket's modified time, and
+    this check is what stops them from starting a new case loop."""
     with store.tx(hub_dir) as conn:
         row = store.row(conn.execute("SELECT * FROM helpdesk_tickets WHERE ticket_id=?", (str(ticket["id"]),))
                         .fetchone())
         if row and row.get("handled_message_id") == inbound_id:
-            return False
+            return row.get("status") == "claimed" and bool(owner) and row.get("owner") == owner
         conn.execute("INSERT INTO helpdesk_tickets(ticket_id, number, observed_modified, latest_inbound_id, "
-                     "handled_message_id, status, updated) VALUES (?,?,?,?,?, 'handled', ?) ON CONFLICT(ticket_id) "
-                     "DO UPDATE SET number=excluded.number, observed_modified=excluded.observed_modified, "
-                     "latest_inbound_id=excluded.latest_inbound_id, handled_message_id=excluded.handled_message_id, "
-                     "status='handled', updated=excluded.updated",
+                     "handled_message_id, status, owner, claimed_at, updated) VALUES (?,?,?,?,?, 'claimed', ?, ?, ?) "
+                     "ON CONFLICT(ticket_id) DO UPDATE SET number=excluded.number, "
+                     "observed_modified=excluded.observed_modified, latest_inbound_id=excluded.latest_inbound_id, "
+                     "handled_message_id=excluded.handled_message_id, status='claimed', owner=excluded.owner, "
+                     "claimed_at=excluded.claimed_at, updated=excluded.updated",
                      (str(ticket["id"]), ticket.get("ticketNumber"), ticket.get("modifiedTime"), inbound_id, inbound_id,
-                      time.time()))
+                      owner, time.time(), time.time()))
         return True
 
 
 def link_case(hub_dir: Path, ticket_id: str, case_id: str) -> None:
+    """The message is a case now: handled for good."""
     with store.tx(hub_dir) as conn:
-        conn.execute("UPDATE helpdesk_tickets SET case_id=? WHERE ticket_id=?", (case_id, str(ticket_id)))
+        conn.execute("UPDATE helpdesk_tickets SET case_id=?, status='handled' WHERE ticket_id=?",
+                     (case_id, str(ticket_id)))
 
 
 # -- what to write -------------------------------------------------------------------

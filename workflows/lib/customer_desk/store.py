@@ -151,7 +151,8 @@ def connect(hub_dir: Path) -> sqlite3.Connection:
 
 
 #: Columns added after the first release of a table: (table, column, type). Additive only.
-ADDED_COLUMNS = [("cases", "page_url", "TEXT"), ("replies", "station_label", "TEXT"), ("cases", "origin", "TEXT")]
+ADDED_COLUMNS = [("cases", "page_url", "TEXT"), ("replies", "station_label", "TEXT"), ("cases", "origin", "TEXT"),
+                 ("case_events", "work_item_id", "TEXT")]
 
 
 def migrate(conn: sqlite3.Connection) -> None:
@@ -213,10 +214,17 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 
-def next_number(conn: sqlite3.Connection, name: str, prefix: str) -> str:
-    """The next display number, inside the caller's transaction."""
+def next_number(conn: sqlite3.Connection, name: str, prefix: str, table: str | None = None) -> str:
+    """The next display number, inside the caller's transaction. With `table`,
+    one sequence covers every namespace and never repeats a number still in
+    that table, so a sample reset after live work cannot collide."""
     cur = conn.execute("SELECT value FROM counters WHERE name=?", (name,)).fetchone()
-    value = (cur["value"] if cur else 0) + 1
+    value = cur["value"] if cur else 0
+    if table is not None:
+        top = conn.execute(f"SELECT MAX(CAST(SUBSTR(number, ?) AS INTEGER)) AS n FROM {table} WHERE number LIKE ?",
+                           (len(prefix) + 2, f"{prefix}-%")).fetchone()["n"]
+        value = max(value, top or 0)
+    value += 1
     conn.execute("INSERT INTO counters(name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
                  (name, value))
     return f"{prefix}-{value:06d}"
@@ -250,7 +258,7 @@ def create_case(conn, *, prefix: str, **fields) -> dict:
     if unknown:
         raise ValueError(f"unknown case fields {sorted(unknown)}")
     cid = new_id()
-    number = next_number(conn, f"case:{fields.get('namespace', 'sample')}", prefix)
+    number = next_number(conn, "case", prefix, "cases")
     now = time.time()
     data = {k: (dumps(v) if k in JSON_COLUMNS else v) for k, v in fields.items()}
     cols = ["id", "number", "created", "updated", *data]
@@ -302,7 +310,7 @@ def list_cases(conn, *, namespace: str, state: str | None = None, queue: str | N
 
 def add_event(conn, case_id: str, *, source_kind: str, source_ref: str, received_at: str, text: str,
               sender_key: str | None = None, sender_display: str | None = None, subject: str | None = None,
-              attachments=None, author_kind: str = "customer") -> tuple[dict, bool]:
+              attachments=None, author_kind: str = "customer", work_item_id: str | None = None) -> tuple[dict, bool]:
     """Attach one message to a case. The same source reference twice is a no-op."""
     existing = conn.execute("SELECT * FROM case_events WHERE source_kind=? AND source_ref=?",
                             (source_kind, source_ref)).fetchone()
@@ -311,9 +319,10 @@ def add_event(conn, case_id: str, *, source_kind: str, source_ref: str, received
     seq = (conn.execute("SELECT COALESCE(MAX(seq), 0) AS n FROM case_events WHERE case_id=?", (case_id,))
            .fetchone()["n"]) + 1
     conn.execute("INSERT INTO case_events(case_id, seq, source_kind, source_ref, received_at, sender_key, "
-                 "sender_display, subject, text, attachments, author_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                 "sender_display, subject, text, attachments, author_kind, work_item_id) "
+                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                  (case_id, seq, source_kind, source_ref, received_at, sender_key, sender_display, subject, text,
-                  dumps(attachments or []), author_kind))
+                  dumps(attachments or []), author_kind, work_item_id))
     return row(conn.execute("SELECT * FROM case_events WHERE case_id=? AND seq=?", (case_id, seq)).fetchone()), True
 
 
@@ -328,10 +337,25 @@ def next_resolution(conn, case_id: str) -> int:
             .fetchone()["n"]) + 1
 
 
+def reserve_resolution(conn, case_id: str, *, trigger: str, work_item_id: str | None) -> int:
+    """Take the next resolution number for one triage, inside the caller's
+    write transaction, so two triages of one case never share a number."""
+    n = next_resolution(conn, case_id)
+    conn.execute("INSERT INTO resolutions(case_id, revision, trigger, work_item_id, requests, actions, created) "
+                 "VALUES (?,?,?,?,'[]','{}',?)", (case_id, n, trigger, work_item_id, time.time()))
+    return n
+
+
+def latest_resolution(conn, case_id: str) -> int:
+    return next_resolution(conn, case_id) - 1
+
+
 def save_resolution(conn, case_id: str, revision: int, **fields) -> dict:
     data = {k: (dumps(v) if k in JSON_COLUMNS else v) for k, v in fields.items()}
     cols = ["case_id", "revision", "created", *data]
-    conn.execute(f"INSERT OR IGNORE INTO resolutions({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
+    updates = ", ".join(f"{k}=excluded.{k}" for k in data)
+    conn.execute(f"INSERT INTO resolutions({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
+                 f"ON CONFLICT(case_id, revision) DO UPDATE SET {updates}",
                  (case_id, revision, time.time(), *data.values()))
     return get_resolution(conn, case_id, revision)
 
@@ -388,8 +412,7 @@ def set_reply_state(conn, case_id: str, revision: int, state: str, *, expect=Non
 def create_ticket(conn, *, prefix: str, case_id: str, severity: str, owner_role: str, summary: str,
                   reason: str | None = None) -> dict:
     tid = new_id()
-    case = get_case(conn, case_id)
-    number = next_number(conn, f"ticket:{(case or {}).get('namespace', 'sample')}", prefix)
+    number = next_number(conn, "ticket", prefix, "tickets")
     now = time.time()
     conn.execute("INSERT INTO tickets(id, number, case_id, severity, owner_role, state, summary, reason, created, "
                  "updated) VALUES (?,?,?,?,?,'open',?,?,?,?)",
@@ -474,14 +497,21 @@ def case_decisions(conn, case_id: str) -> list[dict]:
     return rows(conn.execute("SELECT * FROM decisions WHERE case_id=? ORDER BY created", (case_id,)))
 
 
+def latest_customer_seq(conn, case_id: str) -> int:
+    return conn.execute("SELECT COALESCE(MAX(seq), 0) AS n FROM case_events WHERE case_id=? AND author_kind='customer'",
+                        (case_id,)).fetchone()["n"]
+
+
 def decide(conn, did: str, *, state: str, note: str, by: str) -> dict:
+    """Record a person's decision, and the customer message it was made on."""
     cur = get_decision(conn, did)
     if cur is None:
         raise Conflict("not_found", "No such decision.")
     if cur["state"] != "pending":
         raise Conflict("state_conflict", f"This decision was already {cur['state']} by {cur['decided_by']}.")
-    conn.execute("UPDATE decisions SET state=?, note=?, decided_by=?, decided_at=?, revision=revision+1 WHERE id=?",
-                 (state, note, by, time.time(), cur["id"]))
+    inputs = dict(cur["inputs"], decided_on_message=latest_customer_seq(conn, cur["case_id"]))
+    conn.execute("UPDATE decisions SET state=?, note=?, decided_by=?, decided_at=?, inputs=?, revision=revision+1 "
+                 "WHERE id=?", (state, note, by, time.time(), dumps(inputs), cur["id"]))
     return get_decision(conn, cur["id"])
 
 
@@ -529,7 +559,9 @@ def reset_namespace(conn, namespace: str) -> dict:
     for cid in ids:
         conn.execute("DELETE FROM helpdesk_tickets WHERE case_id=?", (cid,))
         conn.execute("DELETE FROM cases WHERE id=?", (cid,))
-    conn.execute("DELETE FROM counters WHERE name IN (?, ?)", (f"case:{namespace}", f"ticket:{namespace}"))
+    # Numbering starts again after the highest number still in use in any namespace.
+    conn.execute("DELETE FROM counters WHERE name IN ('case', 'ticket', ?, ?)", (f"case:{namespace}",
+                                                                              f"ticket:{namespace}"))
     conn.execute("DELETE FROM cursor WHERE name='zoho_poll'")
     counts["bindings"] = conn.execute("DELETE FROM bindings WHERE synthetic=1").rowcount
     return counts

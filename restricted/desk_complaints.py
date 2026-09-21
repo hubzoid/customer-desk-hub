@@ -18,6 +18,8 @@ from customer_desk import actions, chat  # noqa: E402
 
 @function_tool
 @chat.guard
-def desk_review_plan(case: str, approve: bool, note: str) -> str:
-    """Approve an escalation plan, or ask for changes with a note. Approving a plan never approves a send."""
-    return json.dumps(actions.review_plan(HUB, case, chat.actor(HUB), approve=approve, note=note))
+def desk_review_plan(case: str, plan_version: int, plan_digest: str, approve: bool, note: str) -> str:
+    """Approve an escalation plan, or ask for changes with a note. Name the plan version and digest you read
+    (from desk_show_case): a different plan is refused. Approving a plan never approves a send."""
+    return json.dumps(actions.review_plan(HUB, case, chat.actor(HUB), plan_version=plan_version,
+                                          plan_digest=plan_digest, approve=approve, note=note))

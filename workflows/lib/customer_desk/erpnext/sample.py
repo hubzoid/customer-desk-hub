@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from . import pdf
-from .contract import MAX_PDF_BYTES, RESOURCES, ERPContext, ERPError, in_scope, not_found, record
+from .contract import MAX_PDF_BYTES, RESOURCES, ERPContext, ERPError, Records, in_scope, not_found, record
 
 FILES = {"customers": "customers.json", "items": "items.json", "prices": "prices.json",
          "availability": "availability.json", "sales_orders": "sales_orders.json",
@@ -96,7 +96,7 @@ class SampleBackend:
         limit = min(int((query or {}).get("limit") or 50), 200)
         rows = [r for r in self._rows(resource) if in_scope(resource, r, context) and matches(resource, r, query)]
         rows.sort(key=lambda r: r["name"])
-        return [self._wrap(resource, r) for r in rows[:limit]]
+        return Records([self._wrap(resource, r) for r in rows[:limit]], truncated=len(rows) > limit)
 
     def get_print_pdf(self, resource: str, record_id: str, print_format: str, context: ERPContext) -> bytes:
         if resource != "sales_invoices":

@@ -8,9 +8,13 @@ moves the case and reply to match, so the queue never shows a stale
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from . import store
+
+#: A request recorded this long ago without its work item never reached Hubzoid.
+REQUEST_GRACE_SECONDS = 300
 
 OPEN = ("waiting_approval", "saving", "sending", "ambiguous")
 
@@ -27,7 +31,7 @@ def sync_sends(hub_dir: Path, case_id: str | None = None) -> list[dict]:
     if case_id:
         sql += " AND case_id=?"
         args = (case_id,)
-    changed = []
+    changed = _abandoned_requests(hub_dir, case_id)
     for s in store.rows(conn.execute(sql, args)):
         try:
             item = wi_store.get_item(hub_dir, s["work_item_id"])
@@ -75,3 +79,28 @@ def sync_sends(hub_dir: Path, case_id: str | None = None) -> list[dict]:
                 if op and not s.get("operation_id"):
                     store.upsert_send(tconn, s["case_id"], s["reply_revision"], s["mode"], operation_id=op["id"])
     return changed
+
+
+def _abandoned_requests(hub_dir: Path, case_id: str | None) -> list[dict]:
+    """A send or draft request whose work item was never created (the process
+    stopped between recording the request and starting the work). Nothing
+    was sent: the reply goes back to ready for its person."""
+    conn = store.connect(hub_dir)
+    sql = "SELECT * FROM sends WHERE status='requesting' AND work_item_id IS NULL AND updated < ?"
+    args: tuple = (time.time() - REQUEST_GRACE_SECONDS,)
+    if case_id:
+        sql += " AND case_id=?"
+        args += (case_id,)
+    out = []
+    for s in store.rows(conn.execute(sql, args)):
+        with store.tx(hub_dir) as tconn:
+            store.upsert_send(tconn, s["case_id"], s["reply_revision"], s["mode"], status="request_failed")
+            reply = store.get_reply(tconn, s["case_id"], s["reply_revision"])
+            if reply and reply["state"] == "requested":
+                store.set_reply_state(tconn, s["case_id"], s["reply_revision"], "ready")
+            case = store.get_case(tconn, s["case_id"])
+            if case["state"] == "waiting_approval":
+                store.update_case(tconn, case["id"], state="in_review" if case["claimed_by"] else "needs_owner",
+                                  note="The send request did not reach Hubzoid. Nothing was sent. Ask again.")
+        out.append({"case": case["number"], "to": "request_failed"})
+    return out

@@ -56,11 +56,15 @@ def intake(hub_dir: Path, env: dict) -> dict:
     received = env.get("received_at") or config.now_iso(hub_dir, values)
     today = config.today(hub_dir, values)
     with store.tx(hub_dir) as conn:
-        dup = conn.execute("SELECT case_id, seq FROM case_events WHERE source_kind=? AND source_ref=?",
+        dup = conn.execute("SELECT case_id, seq, work_item_id FROM case_events WHERE source_kind=? AND source_ref=?",
                            (env["source_kind"], env["source_ref"])).fetchone()
         if dup is not None:
             c = store.get_case(conn, dup["case_id"])
-            return {"case_id": c["id"], "number": c["number"], "action": "duplicate", "seq": dup["seq"]}
+            # The same work item asking again is a replay after a crash between
+            # this commit and its checkpoint: it carries on with the message.
+            again = bool(env.get("work_item_id")) and dup["work_item_id"] == env.get("work_item_id")
+            return {"case_id": c["id"], "number": c["number"], "action": "resumed" if again else "duplicate",
+                    "seq": dup["seq"]}
         case = None
         action = "created"
         related: list[str] = []
@@ -69,6 +73,12 @@ def intake(hub_dir: Path, env: dict) -> dict:
                 "SELECT * FROM cases WHERE namespace=? AND channel_id=? AND thread_key=? AND state NOT IN "
                 "('cancelled','failed') ORDER BY created DESC", (ns, env.get("channel_id"), env["thread_key"])))
             for p in prior:
+                if p["sender_key"] != key:
+                    # Someone else on the same thread or ticket (a colleague in
+                    # copy, a changed ticket contact): their own case, bound on
+                    # its own, never read under the first sender's customer.
+                    related.append(p["id"])
+                    continue
                 if p["state"] in OPEN_STATES:
                     case, action = p, "appended"
                     break
@@ -101,7 +111,8 @@ def intake(hub_dir: Path, env: dict) -> dict:
                                 received_at=received, text=env["text"], sender_key=key,
                                 sender_display=sender.get("display"), subject=env.get("subject"),
                                 attachments=env.get("attachments") or [],
-                                author_kind="teammate" if internal else "customer")
+                                author_kind="teammate" if internal else "customer",
+                                work_item_id=env.get("work_item_id"))
         store.audit(conn, env.get("opened_by") or "desk", f"case_{action}", case["id"],
                     {"surface": surface, "source_kind": env["source_kind"]})
         return {"case_id": case["id"], "number": case["number"], "action": action, "seq": ev["seq"]}

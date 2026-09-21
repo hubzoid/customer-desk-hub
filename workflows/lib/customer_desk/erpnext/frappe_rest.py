@@ -15,9 +15,11 @@ from urllib.parse import quote
 
 import httpx
 
-from .contract import (COMPANY_SCOPED, MAX_PDF_BYTES, RESOURCES, ERPContext, ERPError, in_scope, not_found,
-                       record)
+from .contract import (COMPANY_SCOPED, MAX_PDF_BYTES, RESOURCES, ERPContext, ERPError, Records, in_scope,
+                       not_found, record)
 
+#: At most this many pages per list read. Past it the list comes back truncated.
+MAX_LIST_PAGES = 20
 SLEEP: Callable[[float], None] = time.sleep
 
 
@@ -110,6 +112,10 @@ class FrappeRestBackend:
             f.append([resource_doctype(resource), "item_code", "in", list(q["item_codes"])])
         if q.get("docstatus") is not None:
             f.append([resource_doctype(resource), "docstatus", "=", q["docstatus"]])
+        if q.get("open_only") and resource == "sales_orders":
+            # Filtered by ERPNext itself, so closed orders never fill the page.
+            f.append([resource_doctype(resource), "docstatus", "=", 1])
+            f.append([resource_doctype(resource), "status", "not in", ["Completed", "Closed", "Cancelled"]])
         if q.get("outstanding_only"):
             f.append([resource_doctype(resource), "outstanding_amount", "!=", 0])
         if q.get("warehouses"):
@@ -126,28 +132,39 @@ class FrappeRestBackend:
             f.append([resource_doctype(resource), field, "like", f"%{q['name_search']}%"])
         return f
 
-    def list_records(self, resource: str, query: dict, context: ERPContext) -> list[dict]:
+    def list_records(self, resource: str, query: dict, context: ERPContext) -> Records:
+        """Pages through ERPNext until `limit` matching records are found or the
+        list ends. One more than asked is looked for, so a longer list comes
+        back marked `truncated` instead of silently cut."""
+        from .sample import matches
+
         doctype = self._doctype(resource)
         limit = min(int((query or {}).get("limit") or self.page_size), 200)
-        params = {"filters": json.dumps(self._filters(resource, query, context)), "fields": json.dumps(["name"]),
-                  "limit_page_length": str(limit), "order_by": "name asc"}
-        body = self._get(f"/api/resource/{quote(doctype)}", params) or {}
-        out = []
-        for row in body.get("data") or []:
-            try:
-                rec = self.get_record(resource, row["name"], context)
-            except ERPError as exc:
-                if exc.code == "not_found":
-                    continue
-                raise
-            from .sample import matches
-
-            # The desk rechecks scope and the bounded filters on the full record,
-            # so a Frappe filter that a site ignores never widens what is shown.
-            raw = dict(rec["fields"], name=rec["id"], company=rec["company"] or context.company)
-            if in_scope(resource, raw, context) and matches(resource, raw, query):
-                out.append(rec)
-        return out
+        filters = json.dumps(self._filters(resource, query, context))
+        out: list[dict] = []
+        start = 0
+        for _ in range(MAX_LIST_PAGES):
+            params = {"filters": filters, "fields": json.dumps(["name"]), "limit_start": str(start),
+                      "limit_page_length": str(self.page_size), "order_by": "name asc"}
+            rows = (self._get(f"/api/resource/{quote(doctype)}", params) or {}).get("data") or []
+            for row in rows:
+                try:
+                    rec = self.get_record(resource, row["name"], context)
+                except ERPError as exc:
+                    if exc.code == "not_found":
+                        continue
+                    raise
+                # The desk rechecks scope and the bounded filters on the full record,
+                # so a Frappe filter that a site ignores never widens what is shown.
+                raw = dict(rec["fields"], name=rec["id"], company=rec["company"] or context.company)
+                if in_scope(resource, raw, context) and matches(resource, raw, query):
+                    out.append(rec)
+                    if len(out) > limit:
+                        return Records(out[:limit], truncated=True)
+            if len(rows) < self.page_size:
+                return Records(out, truncated=False)
+            start += len(rows)
+        return Records(out[:limit], truncated=True)
 
     def get_print_pdf(self, resource: str, record_id: str, print_format: str, context: ERPContext) -> bytes:
         if resource != "sales_invoices":

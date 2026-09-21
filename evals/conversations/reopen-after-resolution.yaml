@@ -12,4 +12,5 @@ expect:
   reopen_count: 1
   outcomes_include: [send_copy]
   outbox: 1
+  outbox_must_include: ["SYN-SO-0001"]
   must_include: ["SYN-SINV-0002"]

@@ -92,13 +92,19 @@ def show(hub_dir: Path, case_ref: str) -> str:
     cv = views.compact(view)
     sections = [{"heading": f"{c['number']}: {c['state']}", "markdown": view["state_text"] + (
         f"\n\nDesk notes: {c['note']}" if c.get("note") else "")}]
-    msgs = "\n".join(f"- {m['from']} {m['at']}: {m['text'][:600]}" for m in cv["messages"])
-    sections.append({"heading": "Conversation", "markdown": msgs or "No messages."})
     if c["state"] == "binding_required":
+        # No model reads an unbound message, the assistant included: only who
+        # wrote and when. People read the text on the case page or in Intake.
+        lines = "\n".join(f"- {m['from']} {m['at']}: {len(m['text'] or '')} characters" for m in cv["messages"])
+        sections.append({"heading": "Conversation", "markdown": (lines or "No messages.") +
+                         "\n\nThe message text stays hidden from the assistant until the sender is bound. Read it "
+                         "on the case page" + (f" ({c['page_url']})" if c.get("page_url") else "") + "."})
         sections.append({"heading": "Sender not recognised", "markdown":
                          f"We could not match this sender to a customer. Sender: {c['sender_key']}. No customer "
                          "data was read. A binding admin can bind it to one customer, or reject the message."})
         return _json({"kind": "report", "title": f"Case {c['number']}", "sections": sections, "sources": []})
+    msgs = "\n".join(f"- {m['from']} {m['at']}: {m['text'][:600]}" for m in cv["messages"])
+    sections.append({"heading": "Conversation", "markdown": msgs or "No messages."})
     if cv["requests"]:
         sections.append({"heading": "Requests and outcomes", "markdown": "\n".join(
             f"- {r['no']}. {r['category']}: **{r['outcome']}** (rules {', '.join(r['rules'])})"
@@ -115,6 +121,10 @@ def show(hub_dir: Path, case_ref: str) -> str:
                             if r["typed_by_person"] else "")})
         sections.append({"heading": "Checks", "markdown": "\n".join(f"- {x}" for x in r["checks"]) +
                          f"\n\nDigest: {r['digest']}"})
+    for pl in cv["plans"][-2:]:
+        sections.append({"heading": f"Escalation plan, version {pl['version']} ({pl['state']})", "markdown":
+                         pl["body"] + f"\n\nBy {pl['author']}. Digest: {pl['digest']}"
+                         + (f"\n\nReviewed by {pl['reviewer']}: {pl['note']}" if pl["reviewer"] else "")})
     rv = cv.get("reviewer")
     if rv:
         sections.append({"heading": f"Reviewer: {rv.get('verdict')}", "markdown": "\n".join(

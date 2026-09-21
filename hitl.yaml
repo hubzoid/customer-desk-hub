@@ -10,5 +10,7 @@ tools:
   desk_edit_reply: {ask: always}
   desk_decide_exception: {ask: always}
   desk_decline_delivery: {ask: always}
+  desk_verify_delivery: {ask: always}
+  desk_update_ticket: {ask: always}
   desk_review_plan: {ask: always}
   desk_set_state: {ask: always}

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import bindings as bindings_lib
-from . import cases, checks, config, envelopes, facts as facts_lib, pipeline, render, replies, store
+from . import cases, checks, config, envelopes, facts as facts_lib, pipeline, render, replies, scope, store
 from .erpnext import config as erp_config
 from .erpnext.contract import ERPContext, ERPError
 
@@ -73,13 +73,15 @@ def claim(hub_dir: Path, ref: str, actor: Actor, *, expected_revision: int | Non
     case = _case(hub_dir, ref)
     role = config.QUEUE_ROLE.get(case["queue"] or "operators", "desk_operator")
     require(actor, role, "desk_operator")
-    if case["state"] in ("binding_required", "triaging", "received", "sending", "cancelled"):
-        raise ActionError("state_conflict", f"{case['number']} is {case['state']} and cannot be claimed now.")
-    if case["claimed_by"] and case["claimed_by"] != actor.email:
-        since = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(case["claimed_at"] or 0))
-        raise ActionError("claim_conflict", f"{case['claimed_by']} holds {case['number']} since {since}.",
-                          held_by=case["claimed_by"])
     with store.tx(hub_dir) as conn:
+        # Checked and taken in one write transaction: two people never both hold a case.
+        case = store.get_case(conn, case["id"])
+        if case["state"] in ("binding_required", "triaging", "received", "sending", "cancelled"):
+            raise ActionError("state_conflict", f"{case['number']} is {case['state']} and cannot be claimed now.")
+        if case["claimed_by"] and case["claimed_by"] != actor.email:
+            since = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(case["claimed_at"] or 0))
+            raise ActionError("claim_conflict", f"{case['claimed_by']} holds {case['number']} since {since}.",
+                              held_by=case["claimed_by"])
         state = "in_review" if case["state"] == "needs_owner" else case["state"]
         c = store.update_case(conn, case["id"], expected_revision=expected_revision, claimed_by=actor.email,
                               claimed_at=time.time(), state=state)
@@ -91,11 +93,38 @@ def release(hub_dir: Path, ref: str, actor: Actor) -> dict:
     case = _case(hub_dir, ref)
     if case["claimed_by"] != actor.email and not actor.can(ADMIN):
         raise ActionError("permission_denied", "Only the person holding the case, or a manager, can release it.", 403)
+    holder = case["claimed_by"]
     with store.tx(hub_dir) as conn:
-        state = "needs_owner" if case["state"] == "in_review" else case["state"]
+        state = "needs_owner" if case["state"] in ("in_review", "waiting_approval") else case["state"]
         c = store.update_case(conn, case["id"], claimed_by=None, claimed_at=None, state=state)
         store.audit(conn, actor.email, "case_release", c["id"])
-    return {"case": c["number"], "state": c["state"], "revision": c["revision"]}
+    # A send waits for its requester's approval only while they hold the case.
+    cancelled = cancel_waiting_sends(hub_dir, case["id"], reason="The case was released.", requested_by=holder)
+    return {"case": c["number"], "state": c["state"], "revision": c["revision"], "sends_cancelled": cancelled}
+
+
+def cancel_waiting_sends(hub_dir: Path, case_id: str, *, reason: str, requested_by: str | None = None) -> list[str]:
+    """Cancel send work still waiting for approval on this case, as its own
+    requester, and put the reply back to ready. Dispatch would refuse it anyway."""
+    from hubzoid.work_items import service as wi
+
+    out = []
+    conn = store.connect(hub_dir)
+    for s in store.case_sends(conn, case_id):
+        if s["status"] not in ("waiting_approval", "requesting") or (requested_by and s["requested_by"] != requested_by):
+            continue
+        if s.get("work_item_id") and s.get("requested_by"):
+            try:
+                wi.cancel(hub_dir, s["work_item_id"], s["requested_by"], reason=reason)
+            except Exception:  # noqa: BLE001 - already finished or stopped: dispatch still checks the claim
+                pass
+        with store.tx(hub_dir) as tconn:
+            store.upsert_send(tconn, case_id, s["reply_revision"], s["mode"], status="cancelled")
+            r = store.get_reply(tconn, case_id, s["reply_revision"])
+            if r and r["state"] == "requested":
+                store.set_reply_state(tconn, case_id, s["reply_revision"], "ready")
+        out.append(s.get("work_item_id") or s["reply_revision"])
+    return out
 
 
 # -- replies -------------------------------------------------------------------------------
@@ -238,18 +267,44 @@ def request_send(hub_dir: Path, ref: str, actor: Actor, *, reply_revision: int, 
         raise ActionError("reply_stale", "ERPNext changed since this reply was drafted: "
                           + ", ".join(f"{s['fact_id']} {s['was']} -> {s['now']}" for s in stale)
                           + ". A new revision is being drafted. Review it.", stale=stale)
-    item = start("customer_desk_case", key=f"send:{case['id']}:{reply['revision']}", route="send",
-                 input={"action": "send", "case_id": case["id"], "reply_revision": reply["revision"],
-                        "digest": reply["digest"]}, requester=actor.email, **_origin(case, actor))
+    # The request is recorded before the send work exists, so the worker always
+    # finds the reply requested. Checked again inside the write transaction.
     with store.tx(hub_dir) as conn:
+        c = store.get_case(conn, case["id"])
+        r = store.get_reply(conn, case["id"], reply["revision"])
+        if (c["claimed_by"] != actor.email or c["current_reply"] != reply["revision"] or r["digest"] != digest
+                or r["state"] not in ("ready", "mailbox_draft_saved", "helpdesk_draft_saved")):
+            raise ActionError("reply_stale", f"{case['number']} changed while you asked. Reload and review it.")
+        before = {"case": c["state"], "reply": r["state"]}
         store.set_reply_state(conn, case["id"], reply["revision"], "requested")
         store.upsert_send(conn, case["id"], reply["revision"], "approve", synthetic=case["synthetic"],
-                          work_item_id=item["id"], status="waiting_approval", requested_by=actor.email)
-        c = store.update_case(conn, case["id"], state="waiting_approval")
+                          status="requesting", requested_by=actor.email, work_item_id=None)
+        store.update_case(conn, case["id"], state="waiting_approval")
+    try:
+        item = start("customer_desk_case", key=f"send:{case['id']}:{reply['revision']}", route="send",
+                     input={"action": "send", "case_id": case["id"], "reply_revision": reply["revision"],
+                            "digest": reply["digest"]}, requester=actor.email, **_origin(case, actor))
+    except Exception:
+        with store.tx(hub_dir) as conn:
+            store.set_reply_state(conn, case["id"], reply["revision"], before["reply"])
+            store.upsert_send(conn, case["id"], reply["revision"], "approve", status="request_failed")
+            store.update_case(conn, case["id"], state=before["case"])
+        raise
+    with store.tx(hub_dir) as conn:
+        _attach_item(conn, case["id"], reply["revision"], "approve", item["id"], "requesting", "waiting_approval")
+        c = store.get_case(conn, case["id"])
         store.audit(conn, actor.email, "send_request", case["id"], {"reply": reply["revision"], "item": item["id"]})
     return {"state": "human_action_required", "case": c["number"], "reply": reply["revision"], "digest": reply["digest"],
             "work_item_id": item["id"], "revision": c["revision"],
             "message": "Approve the exact reply on the Work items page. Only you, the requester, can approve it."}
+
+
+def _attach_item(conn, case_id: str, revision: int, mode: str, item_id: str, was: str, now: str) -> None:
+    """Record the work item on its send row. The status moves on only if the
+    worker has not already settled it."""
+    conn.execute("UPDATE sends SET work_item_id=?, status=CASE WHEN status=? THEN ? ELSE status END, updated=? "
+                 "WHERE case_id=? AND reply_revision=? AND mode=?", (item_id, was, now, time.time(), case_id, revision,
+                                                                   mode))
 
 
 def save_draft(hub_dir: Path, ref: str, actor: Actor, *, reply_revision: int, digest: str, start) -> dict:
@@ -265,12 +320,19 @@ def save_draft(hub_dir: Path, ref: str, actor: Actor, *, reply_revision: int, di
     if mode != "draft":
         raise ActionError("write_mode_" + mode, f"Replies on {case['channel_id']} are in {mode} mode, not draft.", 403)
     reply = _current_reply(hub_dir, case, reply_revision, digest)
-    item = start("customer_desk_case", key=f"draft:{case['id']}:{reply['revision']}", route="draft",
-                 input={"action": "draft", "case_id": case["id"], "reply_revision": reply["revision"],
-                        "digest": reply["digest"]}, requester=actor.email, **_origin(case, actor))
     with store.tx(hub_dir) as conn:
         store.upsert_send(conn, case["id"], reply["revision"], "draft", synthetic=case["synthetic"],
-                          work_item_id=item["id"], status="saving", requested_by=actor.email)
+                          status="requesting", requested_by=actor.email, work_item_id=None)
+    try:
+        item = start("customer_desk_case", key=f"draft:{case['id']}:{reply['revision']}", route="draft",
+                     input={"action": "draft", "case_id": case["id"], "reply_revision": reply["revision"],
+                            "digest": reply["digest"]}, requester=actor.email, **_origin(case, actor))
+    except Exception:
+        with store.tx(hub_dir) as conn:
+            store.upsert_send(conn, case["id"], reply["revision"], "draft", status="request_failed")
+        raise
+    with store.tx(hub_dir) as conn:
+        _attach_item(conn, case["id"], reply["revision"], "draft", item["id"], "requesting", "saving")
         store.audit(conn, actor.email, "draft_request", case["id"], {"reply": reply["revision"], "item": item["id"]})
     return {"case": case["number"], "reply": reply["revision"], "work_item_id": item["id"], "state": "saving_draft"}
 
@@ -402,8 +464,11 @@ def verify_delivery(hub_dir: Path, proposal_id: str, actor: Actor, *, start) -> 
     cfg = erp_config.load(hub_dir)
     erp = erp_config.backend(hub_dir, cfg)
     try:
-        order = erp.get_record("sales_orders", p["sales_order"], ERPContext(
-            hub_id=Path(hub_dir).name.lower(), company=cfg.company, party_scope=case["customer_id"]))
+        ctx = scope.erp_context(hub_dir, case, principal=actor.email, cfg=cfg)
+    except scope.ScopeError as exc:
+        raise ActionError(exc.code, exc.message) from None
+    try:
+        order = erp.get_record("sales_orders", p["sales_order"], ctx)
     except ERPError as exc:
         raise ActionError(exc.code, f"ERPNext could not be read: {exc.message}", 503) from None
     now = order["fields"].get("delivery_date")
@@ -483,8 +548,10 @@ def share_plan(hub_dir: Path, ref: str, actor: Actor, plan: str) -> dict:
     return {"case": case["number"], "plan_version": v, "digest": digest, "state": "waiting_plan"}
 
 
-def review_plan(hub_dir: Path, ref: str, actor: Actor, *, approve: bool, note: str) -> dict:
-    """The complaint team reviews an escalation plan. Approving a plan never approves a send."""
+def review_plan(hub_dir: Path, ref: str, actor: Actor, *, plan_version: int, plan_digest: str, approve: bool,
+                note: str) -> dict:
+    """The complaint team reviews one exact escalation plan, named by version
+    and digest. Approving a plan never approves a send."""
     require(actor, "desk_complaints")
     case = _case(hub_dir, ref)
     with store.tx(hub_dir) as conn:
@@ -492,6 +559,10 @@ def review_plan(hub_dir: Path, ref: str, actor: Actor, *, approve: bool, note: s
                             (case["id"],)).fetchone()
         if plan is None:
             raise ActionError("not_found", f"{case['number']} has no plan waiting for review.", 404)
+        if plan["version"] != int(plan_version) or plan["digest"] != plan_digest:
+            raise ActionError("plan_stale", f"The plan waiting on {case['number']} is version {plan['version']} "
+                              f"({plan['digest']}), not the one you reviewed. Read it again.",
+                              plan_version=plan["version"], plan_digest=plan["digest"])
         conn.execute("UPDATE plans SET state=?, reviewer=?, note=?, reviewed=? WHERE case_id=? AND version=?",
                      ("approved" if approve else "changes_requested", actor.email, note, time.time(), case["id"],
                       plan["version"]))

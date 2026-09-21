@@ -1,4 +1,5 @@
-"""Upkeep: keep cases in step with send work people decided on the Work items page."""
+"""Upkeep: keep cases in step with send work people decided on the Work items page, and case pages
+shared with exactly the people who hold a desk role now."""
 import sys
 from pathlib import Path
 
@@ -8,12 +9,15 @@ if str(_LIB) not in sys.path:
 
 from hubzoid import workflow  # noqa: E402
 
-from customer_desk import sync  # noqa: E402
+from customer_desk import flows, sync  # noqa: E402
 
 
 @workflow("every 1 minute")
 def desk_sync():
-    """Move cases whose send was rejected, cancelled or left uncertain to the right state."""
+    """Move cases whose send was rejected, cancelled or left uncertain to the right state, and reshare case
+    pages when desk roles change."""
     from hubzoid.workflows.context import _ctx
 
-    return {"changed": sync.sync_sends(Path(_ctx().hub_dir))}
+    hub_dir = Path(_ctx().hub_dir)
+    return {"changed": sync.sync_sends(hub_dir),
+            "pages": flows.refresh_pages_if_readers_changed(hub_dir, flows.start_work(hub_dir))}

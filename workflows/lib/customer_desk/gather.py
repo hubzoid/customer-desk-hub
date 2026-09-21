@@ -229,6 +229,8 @@ def invoice_copy(c: Context, n: int, req: dict) -> Outcome:
 
 # -- account statement ---------------------------------------------------------------------
 
+STATEMENT_LIMIT = 200
+
 def account_statement(c: Context, n: int, req: dict) -> Outcome:
     pol = c.policy.category("account_statement")
     out = Outcome(n, "account_statement", "statement", ["statement", "no_open_invoices", "clarify"], ["R3", "R8"])
@@ -238,8 +240,14 @@ def account_statement(c: Context, n: int, req: dict) -> Outcome:
     if (to - frm).days > pol["max_range_days"]:
         frm = to - dt.timedelta(days=pol["max_range_days"])
         out.notes.append("The requested period was longer than policy allows, so it was shortened.")
-    recs = c.erp.list_records("sales_invoices", {"docstatus": 1, "outstanding_only": True, "date_from": frm.isoformat(),
-                                                  "date_to": to.isoformat(), "limit": 200}, c.ctx)
+    query = {"docstatus": 1, "outstanding_only": True, "date_from": frm.isoformat(), "date_to": to.isoformat(),
+             "limit": STATEMENT_LIMIT}
+    recs = c.erp.list_records("sales_invoices", query, c.ctx)
+    if getattr(recs, "truncated", False):
+        out.outcome = "clarify"
+        out.notes.append(f"More than {STATEMENT_LIMIT} open invoices in the period. The desk does not send a partial "
+                         "statement. Send it from ERPNext, or ask the customer for a shorter period.")
+        return out
     open_, credits = [r for r in recs if not r["fields"].get("is_return")], [r for r in recs if r["fields"].get("is_return")]
     out.slots["period_from"] = c.sheet.add("date", frm.isoformat(), source={"backend": "desk", "doctype": "desk",
                                                                           "name": "statement", "field": "from"})
@@ -259,21 +267,29 @@ def account_statement(c: Context, n: int, req: dict) -> Outcome:
                          f"{display('outstanding', f['outstanding_amount'], currency=f['currency'])} |")
         return "\n".join(lines)
 
+    # The query and each invoice's outstanding amount travel with the facts, so
+    # the send-time recheck relists the same period and catches a payment, a
+    # new invoice or a credit note, not only an invoice that closed.
     src = {"backend": recs[0]["backend"], "doctype": "Sales Invoice", "name": ",".join(r["id"] for r in recs),
-           "field": "outstanding_amount", "observed_at": recs[0]["observed_at"]}
+           "field": "outstanding_amount", "observed_at": recs[0]["observed_at"], "query": query}
+
+    def amounts(rows):
+        return {r["id"]: str(Decimal(str(r["fields"]["outstanding_amount"]))) for r in rows}
+
     party = c.ctx.party_scope
     if open_:
         out.slots["table"] = c.sheet.add("statement_table", [r["id"] for r in open_], source=dict(src, name=",".join(
-            r["id"] for r in open_)), display_text=table(open_), party=party)
+            r["id"] for r in open_), amounts=amounts(open_)), display_text=table(open_), party=party)
         totals: dict[str, Decimal] = {}
         for r in open_:
             totals[r["fields"]["currency"]] = totals.get(r["fields"]["currency"], Decimal(0)) + Decimal(
                 str(r["fields"]["outstanding_amount"]))
-        out.slots["totals"] = [c.sheet.add("statement_total", str(v), source=dict(src, field=f"total:{k}"),
+        out.slots["totals"] = [c.sheet.add("statement_total", str(v), source=dict(src, field=f"total:{k}", currency=k),
                                            currency=k, party=party) for k, v in sorted(totals.items())]
     if credits:
         out.slots["credit_notes"] = c.sheet.add("credit_note", [r["id"] for r in credits],
-                                                source=dict(src, name=",".join(r["id"] for r in credits)),
+                                                source=dict(src, name=",".join(r["id"] for r in credits),
+                                                            amounts=amounts(credits)),
                                                 display_text=table(credits), party=party)
     buf = io.StringIO()
     w = csv.writer(buf)
@@ -285,7 +301,10 @@ def account_statement(c: Context, n: int, req: dict) -> Outcome:
     att = c.owners.attachment(name="open-invoices.csv", media_type="text/csv", data=buf.getvalue().encode())
     att["source"] = {"doctype": "Sales Invoice", "name": "statement", "backend": recs[0]["backend"]}
     out.attachments.append(att)
-    out.slots["observed"] = c.sheet.add("observed", c.sheet.observed_at[:10], source=dict(src, field="observed_at"),
+    # When the desk read ERPNext: desk metadata, not an invoice field.
+    out.slots["observed"] = c.sheet.add("observed", c.sheet.observed_at[:10],
+                                        source={"backend": "desk", "doctype": "desk", "name": "statement",
+                                                "field": "observed_at"},
                                         display_text=display("date", c.sheet.observed_at[:10]))
     return out
 

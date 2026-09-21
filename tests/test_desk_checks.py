@@ -233,9 +233,15 @@ def test_escalation_ticket_and_plan_required(bound):
     with pytest.raises(actions.ActionError) as exc:
         actions._plan_ok(bound, store.get_case(conn, case["id"]))
     assert exc.value.code == "plan_required"
-    actions.share_plan(bound, case["number"], op, "Call the customer, confirm the date with the delivery team.")
+    first = actions.share_plan(bound, case["number"], op, "Call the customer.")
+    plan = actions.share_plan(bound, case["number"], op, "Call the customer, confirm the date with the delivery team.")
     lead = actions.Actor("lead@desk.example", lambda r: r == "desk_complaints")
-    out = actions.review_plan(bound, case["number"], lead, approve=True, note="Fine")
+    with pytest.raises(actions.ActionError) as exc:          # the card showed the first plan: refused
+        actions.review_plan(bound, case["number"], lead, plan_version=first["plan_version"],
+                            plan_digest=first["digest"], approve=True, note="Fine")
+    assert exc.value.code == "plan_stale"
+    out = actions.review_plan(bound, case["number"], lead, plan_version=plan["plan_version"], plan_digest=plan["digest"],
+                              approve=True, note="Fine")
     assert out["note"] == "Approving a plan never approves a send."
     actions._plan_ok(bound, store.get_case(conn, case["id"]))
 

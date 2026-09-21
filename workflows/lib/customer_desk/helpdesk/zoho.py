@@ -169,7 +169,9 @@ class _Base:
         refreshed = False
         attempts = RETRIES if retry else 1
         last: Exception | None = None
-        for attempt in range(attempts):
+        attempt = -1
+        while attempt + 1 < attempts:
+            attempt += 1
             headers = {"Authorization": f"Zoho-oauthtoken {self._token(force=refreshed)}"}
             if with_org:
                 headers["orgId"] = self._org()
@@ -183,7 +185,11 @@ class _Base:
                 SLEEP(min(2 ** attempt, 10))
                 continue
             if resp.status_code == 401 and not refreshed:
+                # A definite refusal before anything was applied: refresh the
+                # token once and ask again, writes included, without using up
+                # a transport retry.
                 refreshed = True
+                attempt -= 1
                 continue
             if resp.status_code in RETRY_STATUS and retry and attempt + 1 < attempts:
                 wait = resp.headers.get("Retry-After", "")
@@ -219,6 +225,24 @@ class Reader(_Base):
     def thread(self, ticket_id: str, thread_id: str) -> dict:
         return self._request("GET", f"/tickets/{int(ticket_id)}/threads/{int(thread_id)}",
                              params={"include": "plainText"})
+
+    def all_threads(self, ticket_id: str, *, pages: int = 10) -> tuple[list[dict], bool]:
+        """Every thread of a ticket, paged. (threads, complete): complete is
+        false when the ticket has more than the pages read."""
+        return self._all(f"/tickets/{int(ticket_id)}/threads", 200, pages, {"sortBy": "-sendDateTime"})
+
+    def all_comments(self, ticket_id: str, *, pages: int = 10) -> tuple[list[dict], bool]:
+        return self._all(f"/tickets/{int(ticket_id)}/comments", 100, pages, {})
+
+    def _all(self, path: str, limit: int, pages: int, params: dict) -> tuple[list[dict], bool]:
+        out: list[dict] = []
+        for n in range(pages):
+            body = self._request("GET", path, params={**params, "limit": limit, "from": n * limit}) or {}
+            rows = body.get("data") or []
+            out += rows
+            if len(rows) < limit:
+                return out, True
+        return out, False
 
     def tags(self, ticket_id: str) -> list[str]:
         body = self._request("GET", f"/tickets/{int(ticket_id)}/tags") or {}
@@ -309,7 +333,15 @@ class Writer(Reader):
         blocked = stop_switch(self.hub_dir)
         if blocked:
             raise WritesBlocked(f"Helpdesk writes are stopped: {blocked}.")
-        self.policy.check(method, path, body)
+        # The mode and the draft switch are read now, at the moment of writing,
+        # never from when this client was made.
+        now = current_policy(self.hub_dir)
+        if now is None:
+            raise WritesBlocked("The helpdesk mode is dry-run now, so nothing is written.")
+        if now.mode != self.policy.mode:
+            raise WritesBlocked(f"The helpdesk mode changed to {now.mode} after this write was prepared.")
+        self.policy.check(method, path, body)       # what this client was made for
+        now.check(method, path, body)               # and what the settings allow right now
 
     def associate_tags(self, ticket_id: str, tags: list[str]):
         return self._request("POST", f"/tickets/{int(ticket_id)}/associateTag", body={"tags": sorted(set(tags))},
@@ -335,6 +367,21 @@ class Writer(Reader):
         if attachment_ids:
             body["attachmentIds"] = attachment_ids
         return self._request("POST", f"/tickets/{int(ticket_id)}/draftReply", body=body, retry=False)
+
+
+def policy_from(values: dict) -> "WritePolicy | None":
+    mode = values["DESK_HELPDESK_MODE"]
+    if mode not in ("shadow", "live"):
+        return None
+    return WritePolicy(mode=mode, tag_prefix=values["ZOHO_DESK_TAG_PREFIX"],
+                       allow_drafts=bool(values["DESK_HELPDESK_DRAFTS"]) and mode == "live",
+                       case_field=values.get("ZOHO_DESK_CASE_FIELD") or None)
+
+
+def current_policy(hub_dir: Path) -> "WritePolicy | None":
+    from .. import config
+
+    return policy_from(config.settings(hub_dir))
 
 
 def credentials(hub_dir: Path, values: dict, *, write: bool) -> Credentials:

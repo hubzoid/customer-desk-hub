@@ -111,6 +111,7 @@ def case(hub_dir: Path, ref: str) -> dict | None:
             "resolution": res, "facts": facts, "reply": current, "replies": replies, "tickets": tickets,
             "proposals": store.case_proposals(conn, c["id"]), "decisions": store.case_decisions(conn, c["id"]),
             "sends": store.case_sends(conn, c["id"]),
+            "plans": store.rows(conn.execute("SELECT * FROM plans WHERE case_id=? ORDER BY version", (c["id"],))),
             "outbox": store.rows(conn.execute("SELECT * FROM outbox WHERE case_id=? ORDER BY accepted_at", (c["id"],)))}
 
 
@@ -127,6 +128,9 @@ def compact(view: dict) -> dict:
         "sender": c["sender_key"] if c["state"] == "binding_required" else None,
         "messages": [{"seq": e["seq"], "at": e["received_at"], "from": e["author_kind"], "subject": e["subject"],
                       "text": e["text"][:2000]} for e in view["events"]],
+        "plans": [{"version": p["version"], "digest": p["digest"], "state": p["state"], "author": p["author"],
+                   "reviewer": p["reviewer"], "note": p["note"], "body": p["body"][:2000]}
+                  for p in view.get("plans") or []],
         "requests": [{"no": o["request_no"], "category": o["category"], "outcome": o["outcome"],
                       "rules": o["rule_refs"], "notes": o["notes"]} for o in res.get("requests") or []],
         "classification": {k: (res.get("classifier") or {}).get(k) for k in ("agreement", "low_confidence",

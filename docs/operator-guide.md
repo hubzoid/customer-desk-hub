@@ -29,16 +29,16 @@ Ask in chat "What is waiting on the desk?", or `./desk list --tab open`. Tabs: o
 - tickets, delivery proposals and exception decisions
 - drafts and sends so far
 
-Every case also has a page in the artifact viewer with the same content.
+Every case also has a page in the artifact viewer with the same content. Only people who hold a desk role can open it, and when a role is granted or removed the pages are shared again within a minute. For a case whose sender is not bound yet, the chat assistant shows only who wrote and when. Read the message itself on the case page.
 
 ## What you can do
 
-1. **Claim** the case, so others see you are on it.
+1. **Claim** the case, so others see you are on it. Releasing it cancels a send you asked for that is still waiting for your approval.
 2. **Edit** the reply if needed. Your words are kept exactly. Values you type, such as a date or an amount, are flagged on the approval as "typed by a person, not checked against ERPNext".
 3. Then, depending on the channel's mode:
    - **Draft mode**: save it as a draft in the mailbox, and finish and send it there.
    - **Helpdesk**: the unsent draft is already on the ticket. Edit and send it in the helpdesk.
-   - **Approve mode**: ask to send. Open the Work items page, read exactly what will be sent and to whom, and approve or deny. Only you, the person who asked, can approve. An administrator cannot approve for you.
+   - **Approve mode**: ask to send. Open the Work items page, read exactly what will be sent and to whom, and approve or deny. Only you, the person who asked, can approve. An administrator cannot approve for you. Nothing leaves if, by the time you approve, you no longer hold the case or the desk operator role, the sender's binding changed, ERPNext changed, or the policy or reply style changed. The desk then drafts a new revision.
 4. **Rerun** with an instruction ("mention the bank holiday") to get a new revision. The instruction cannot change the customer, the tools or the policy.
 5. **Internal cases**: for a phone call, "SYN-CUST-002 called for a copy of invoice SYN-SINV-0004". The reply is for you to deliver. It is never sent.
 
@@ -61,6 +61,6 @@ A new message from the customer on an open case makes every unsent reply stale a
 ## Owner work
 
 - **Delivery**: change the date in ERPNext, then "verify delivery proposal 1a2b3c4d". The desk rereads the order. Only a matching date drafts a confirmation. Otherwise it says what ERPNext still shows. Declining needs a note.
-- **Exceptions**: "approve exception 5e6f7a8b: long-standing customer, one-off". You confirm the exact decision on the card. The desk drafts the reply from it. Accounts make any credit note in ERPNext.
-- **Escalations**: a legal threat, a safety issue, a personal data request or another customer's data opens a high severity ticket. The operator shares a plan, the complaints team reviews it, and only then can a reply be requested. Approving a plan never approves a send.
-- **Bindings**: "bind CD-000021 to SYN-CUST-001". You name the customer. The desk never suggests one.
+- **Exceptions**: "approve exception 5e6f7a8b: long-standing customer, one-off". You confirm the exact decision on the card. The desk drafts the reply from it. Accounts make any credit note in ERPNext. A decision covers what the customer had asked when you decided. If they write again afterwards, the desk asks for a fresh decision.
+- **Escalations**: a legal threat, a safety issue, a personal data request or another customer's data opens a high severity ticket. The operator shares a plan, the complaints team reviews that exact plan by its version and digest (shown on the case), and only then can a reply be requested. A newer plan shared meanwhile is refused until it is read. Approving a plan never approves a send.
+- **Bindings**: "bind CD-000021 to SYN-CUST-001". You name the customer. The desk never suggests one. The binding is checked again on every triage and every send: revoking it, or adding a second binding for the same sender, stops all reads for that sender at once.

@@ -29,6 +29,8 @@ def _match(value, op, want) -> bool:
         return value != want and str(value) != str(want) and not (_num(value) == _num(want))
     if op == "in":
         return value in want
+    if op == "not in":
+        return value not in want
     if op == ">=":
         return str(value or "") >= str(want)
     if op == "<=":
@@ -140,7 +142,8 @@ class FakeFrappe:
                 if all(_match(row.get(f[1]), f[2], f[3]) for f in filters):
                     rows.append({"name": row["name"]})
         limit = int(q.get("limit_page_length") or 20)
-        return h._send(200, {"data": sorted(rows, key=lambda r: r["name"])[:limit]})
+        start = int(q.get("limit_start") or 0)
+        return h._send(200, {"data": sorted(rows, key=lambda r: r["name"])[start:start + limit]})
 
     def _find(self, doctype, name):
         with self.lock:

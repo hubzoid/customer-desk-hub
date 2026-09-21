@@ -14,9 +14,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import bindings, checks, config, facts as facts_lib, gather, masking, policy as policy_lib, render, store, vocab
+from . import bindings, checks, config, facts as facts_lib, gather, masking, policy as policy_lib, render, scope, store, vocab
 from .erpnext import config as erp_config
-from .erpnext.contract import ERPContext, ERPError
+from .erpnext.contract import ERPError
 
 MAX_ROUNDS = 3   # the first draft and at most two revisions
 THREAD_CHARS = 12000
@@ -99,13 +99,22 @@ class StoreOwners(gather.Owners):
             return p
 
     def decision(self, *, key, kind, inputs):
+        """The exception decision for this request. A decision made before the
+        customer's latest message does not cover what they asked since (a new
+        amount, a different remedy): a fresh decision is requested and the old
+        one stays as history. A pending one is reused: its decider reads the
+        case as it is when they decide."""
         with store.tx(self.hub_dir) as conn:
+            latest = store.latest_customer_seq(conn, self.case["id"])
             found = self._existing(conn, key)
             if found:
-                return store.get_decision(conn, found["ref_id"])
-            d = store.create_decision(conn, case_id=self.case["id"], kind=kind, inputs=inputs)
-            conn.execute("INSERT INTO owner_keys(case_id, key, kind, ref_id) VALUES (?,?,?,?)",
-                         (self.case["id"], key, "decision", d["id"]))
+                d = store.get_decision(conn, found["ref_id"])
+                if d["state"] == "pending" or int(d["inputs"].get("decided_on_message") or 0) >= latest:
+                    return d
+            d = store.create_decision(conn, case_id=self.case["id"], kind=kind,
+                                      inputs=dict(inputs, based_on_message=latest))
+            conn.execute("INSERT INTO owner_keys(case_id, key, kind, ref_id) VALUES (?,?,?,?) ON CONFLICT(case_id, key) "
+                         "DO UPDATE SET ref_id=excluded.ref_id", (self.case["id"], key, "decision", d["id"]))
             return d
 
     def attachment(self, *, name, media_type, data):
@@ -360,21 +369,27 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
         raise ValueError(f"No case {case_id}")
 
     def bind_stage():
+        # Resolved again on every triage of an external case: a binding added,
+        # revoked or contested since the case was last read decides now, never
+        # the customer id stored on the case.
         c = store.get_case(store.connect(hub_dir), case_id)
-        if c["customer_id"] and (c["origin_kind"] == "internal" or c["binding_id"]):
+        if c["origin_kind"] == "internal" and c["customer_id"]:
             return {"bound": True, "customer_id": c["customer_id"]}
-        if c["sender_key"]:
+        candidates: list[str] = []
+        if c["sender_key"] and c["origin_kind"] != "internal":
             binding, candidates = bindings.resolve(store.connect(hub_dir), values["DESK_COMPANY"], c["sender_kind"],
                                                    c["sender_key"])
             if binding is not None:
                 with store.tx(hub_dir) as tconn:
+                    if c["customer_id"] and c["customer_id"] != binding["customer_id"]:
+                        store.audit(tconn, "desk", "binding_changed", case_id,
+                                    {"was": c["customer_id"], "now": binding["customer_id"]})
                     store.update_case(tconn, case_id, binding_id=binding["id"], customer_id=binding["customer_id"],
                                       candidates=[])
                 return {"bound": True, "customer_id": binding["customer_id"]}
-        else:
-            candidates = []
         with store.tx(hub_dir) as tconn:
-            store.update_case(tconn, case_id, state="binding_required", queue="bindings", candidates=candidates)
+            store.update_case(tconn, case_id, state="binding_required", queue="bindings", candidates=candidates,
+                              binding_id=None, customer_id=None, claimed_by=None)
             store.audit(tconn, "desk", "binding_requested", case_id, {"candidates": len(candidates)})
         return {"bound": False, "candidates": candidates}
 
@@ -384,13 +399,15 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
 
     def open_stage():
         with store.tx(hub_dir) as tconn:
-            r = store.next_resolution(tconn, case_id)
+            r = store.reserve_resolution(tconn, case_id, trigger=trigger, work_item_id=runner.item_id)
+            last = tconn.execute("SELECT COALESCE(MAX(seq), 0) AS n FROM case_events WHERE case_id=?",
+                                 (case_id,)).fetchone()["n"]
             store.update_case(tconn, case_id, state="triaging")
             if runner.item_id:
                 # Lets the resolver's read tools find this case from trusted work item context.
                 tconn.execute("INSERT OR REPLACE INTO item_cases(work_item_id, case_id, resolution) VALUES (?,?,?)",
                               (runner.item_id, case_id, r))
-        return {"revision": r, "today": config.today(hub_dir, values).isoformat()}
+        return {"revision": r, "today": config.today(hub_dir, values).isoformat(), "last_seq": last}
 
     opened = runner.checkpoint(f"open-{trigger}", open_stage)
     rev, today = opened["revision"], opened["today"]
@@ -417,8 +434,10 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
         backend = erp or erp_config.backend(hub_dir)
         cfg = erp_config.load(hub_dir)
         c = store.get_case(store.connect(hub_dir), case_id)
-        ctx = ERPContext(hub_id=Path(hub_dir).name.lower(), company=cfg.company, party_scope=c["customer_id"],
-                         principal="desk-triage", warehouses=cfg.warehouses)
+        try:
+            ctx = scope.erp_context(hub_dir, c, principal="desk-triage", cfg=cfg, values=values)
+        except scope.ScopeError as exc:
+            return {"error": exc.code, "message": exc.message}
         sheet = facts_lib.FactSheet(observed_at=config.now_iso(hub_dir, values), backend=backend.name,
                                     language=classification.get("language") or "en")
         try:
@@ -458,6 +477,10 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
         return {"outcomes": out, "facts": sheet.facts, "queue": queue, "notes": notes, "escalations": escalations}
 
     gathered = runner.checkpoint(f"gather-r{rev}", gather_stage)
+    if gathered.get("error") == "binding_required":
+        with store.tx(hub_dir) as tconn:
+            store.update_case(tconn, case_id, state="binding_required", queue="bindings", note=gathered["message"])
+        return {"state": "binding_required", "case_id": case_id}
     if gathered.get("error"):
         with store.tx(hub_dir) as tconn:
             store.update_case(tconn, case_id, state="needs_owner", queue="operators",
@@ -532,21 +555,33 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
                 break
             findings = [f"{f.get('rule_ref')}: {f.get('problem')} Suggestion: {f.get('suggestion')}"
                         for f in review.get("findings") or []] or ["The reviewer asked for a revision."]
-        if best is None or any(c["status"] == "fail" and c["id"] in ("no_literal_facts", "placeholders_resolve",
-                                                                     "foreign_ids", "facts_owned")
-                               for c in best["checks"]):
-            # The resolver could not produce a safe draft. Fall back to the
-            # approved templates so a person still gets a checked starting point.
+        unsafe = best is None or any(c["status"] == "fail" and c["id"] in ("no_literal_facts", "placeholders_resolve",
+                                                                           "foreign_ids", "facts_owned")
+                                     for c in best["checks"])
+        if unsafe or not best["passed"]:
+            # The resolver could not produce a draft that passes every check
+            # (an unsafe one, or one whose outcome the rules did not decide).
+            # The approved templates are written from the decided outcomes, so
+            # a person still gets a checked starting point. An unsafe draft is
+            # always replaced; a merely failing one only by a passing template.
             source = format_reply(loaded, outcomes)
             fallback = runner.checkpoint(f"check-r{rev}-fallback", lambda: evaluate(source, None, "format"))
             fallback["author_kind"] = "format"
             fallback["resolver"] = resolver_out
             fallback["fallback_reason"] = findings[:5]
-            best = fallback
+            if unsafe or fallback["passed"]:
+                best = fallback
 
     def finalize_stage():
         with store.tx(hub_dir) as tconn:
             c = store.get_case(tconn, case_id)
+            newer_seq = tconn.execute("SELECT COALESCE(MAX(seq), 0) AS n FROM case_events WHERE case_id=?",
+                                      (case_id,)).fetchone()["n"]
+            if store.latest_resolution(tconn, case_id) != rev or newer_seq != opened.get("last_seq", newer_seq):
+                # A newer message or triage started while this one ran: its own
+                # run drafts the reply. This one publishes nothing.
+                store.audit(tconn, "desk", "triage_outdated", case_id, {"resolution": rev})
+                return {"state": "outdated", "case_id": case_id, "resolution": rev}
             for old in store.replies(tconn, case_id):
                 if old["state"] in ("ready", "mailbox_draft_saved", "helpdesk_draft_saved", "requested"):
                     store.set_reply_state(tconn, case_id, old["revision"], "superseded")

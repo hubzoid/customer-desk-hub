@@ -27,10 +27,15 @@ def _fold(text: str) -> str:
     return unicodedata.normalize("NFKC", text or "").casefold()
 
 
+LIST_MARKER = re.compile(r"^\s*\d{1,2}[.)]\s", re.M)
+
+
 def literal_values(text: str, id_patterns: list[str]) -> list[str]:
-    """Anything in `text` that could be a fact: digit runs of two or more, a
-    currency symbol or code, or a document id."""
-    found = re.findall(r"\d[\d,.]*\d", text)
+    """Anything in `text` that could be a fact: any number, even one digit
+    ("7 units", "2 days"), a currency symbol or code, or a document id. Only a
+    Markdown list marker at the start of a line is not a value."""
+    text = LIST_MARKER.sub(" ", model_text(text or ""))
+    found = re.findall(r"\d(?:[\d,.]*\d)?", text)
     found += [ch for ch in text if ch in CURRENCY_SYMBOLS]
     found += [w for w in re.findall(r"\b[A-Z]{3}\b", text) if w in ISO_CURRENCIES]
     for pat in id_patterns:

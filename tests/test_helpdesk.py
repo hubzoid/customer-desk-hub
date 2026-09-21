@@ -25,8 +25,24 @@ def creds(base, write=False):
     return zoho.Credentials("read-client", "read-secret", "read-refresh", f"{base}/api/v1", base)
 
 
+def set_mode(hub, mode, drafts=True, case_field="cf_desk_case"):
+    """The helpdesk settings in force at the moment of writing."""
+    import yaml
+
+    path = hub / "hub.settings.yaml"
+    doc = yaml.safe_load(path.read_text())
+    doc["values"].update({"DESK_HELPDESK_MODE": mode, "DESK_HELPDESK_DRAFTS": drafts,
+                          "ZOHO_DESK_CASE_FIELD": case_field})
+    path.write_text(yaml.safe_dump(doc, sort_keys=False))
+    from hubzoid.hubs import settings as hub_settings
+
+    hub_settings.forget()          # Hubzoid reads hub settings once per process
+
+
 def writer(hub, base, **kw):
-    pol = zoho.WritePolicy(mode=kw.pop("mode", "live"), tag_prefix="desk-", allow_drafts=kw.pop("drafts", True),
+    mode, drafts = kw.pop("mode", "live"), kw.pop("drafts", True)
+    set_mode(hub, mode, drafts)
+    pol = zoho.WritePolicy(mode=mode, tag_prefix="desk-", allow_drafts=drafts,
                            case_field=kw.pop("case_field", "cf_desk_case"))
     return zoho.Writer(creds(base, True), pol, hub_dir=hub, state_dir=hub / ".z")
 
@@ -151,3 +167,27 @@ def test_webhook_body_only_names_a_ticket():
     assert ticket_id_from('[{"payload": {"id": "10002", "ticketNumber": "102"}}]') == "10002"
     assert ticket_id_from({"ticketId": "../../etc"}) is None
     assert ticket_id_from({"subject": "no id"}) is None
+
+
+def test_mode_is_read_at_write_time(hub, fake):
+    f, base = fake
+    t = f.add_ticket(subject="Order", text="Hi", email="a@synthetic-harbor.example", notify=False)
+    w = writer(hub, base)                       # made while the hub is live with drafts
+    set_mode(hub, "dry-run")                    # switched while a triage runs
+    with pytest.raises(zoho.WritesBlocked):
+        w.associate_tags(t["id"], ["desk-order-status"])
+    set_mode(hub, "live", drafts=False)         # drafts switched off
+    with pytest.raises(zoho.WriteRefused):
+        w.draft_reply(t["id"], from_address="support@desk.example", to="a@synthetic-harbor.example",
+                      html=desk.draft_html("Hello", zoho.marker(t["id"], "k")), in_reply_to=None)
+    assert f.drafts(t["id"]) == [] and f.tags.get(t["id"], set()) == set()
+
+
+def test_a_write_refreshes_a_revoked_token_once(hub, fake):
+    f, base = fake
+    t = f.add_ticket(subject="Order", text="Hi", email="a@synthetic-harbor.example", notify=False)
+    w = writer(hub, base)
+    w.associate_tags(t["id"], ["desk-order-status"])
+    f.tokens.clear()                            # the cached token was revoked
+    w.associate_tags(t["id"], ["desk-order-status", "desk-low-confidence"])
+    assert f.tags[t["id"]] == {"desk-order-status", "desk-low-confidence"}

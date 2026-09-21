@@ -301,9 +301,18 @@ def cmd_act(args, hub_dir):
     elif v == "plan-share":
         r = actions.share_plan(hub_dir, args.case, actor, Path(args.file).read_text())
     elif v == "plan-review":
-        if not confirm(args, f"{'Approve' if args.approve else 'Request changes to'} the plan for {args.case}?"):
+        case = store.get_case(store.connect(hub_dir), args.case)
+        plan = case and store.connect(hub_dir).execute(
+            "SELECT * FROM plans WHERE case_id=? AND state='pending' ORDER BY version DESC LIMIT 1",
+            (case["id"],)).fetchone()
+        if not plan:
+            return fail(args, "not_found", f"{args.case} has no plan waiting for review.")
+        print(f"Plan version {plan['version']} by {plan['author']}:\n{plan['body']}\n")
+        if not confirm(args, f"{'Approve' if args.approve else 'Request changes to'} plan version {plan['version']} "
+                             f"for {args.case}?"):
             return fail(args, "permission_denied", "Not confirmed.")
-        r = actions.review_plan(hub_dir, args.case, actor, approve=args.approve, note=args.note or "")
+        r = actions.review_plan(hub_dir, args.case, actor, plan_version=plan["version"], plan_digest=plan["digest"],
+                                approve=args.approve, note=args.note or "")
     else:
         return 2
     return out(args, r)

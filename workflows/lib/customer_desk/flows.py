@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -103,12 +104,12 @@ def triage_item(inp: dict | None = None) -> dict:
     trigger = kind
     instruction = None
     if kind == "envelope":
-        env = envelopes.from_envelope(inp["envelope"])
+        env = dict(envelopes.from_envelope(inp["envelope"]), work_item_id=hub.work_item.id)
         opened = hub.work_item.checkpoint("intake", lambda: cases.intake(hub_dir, env))
     elif kind == "intake":
         if inp.get("channel") not in values["DESK_EXTERNAL_CHANNELS"]:
             return {"state": "ignored", "message": f"Channel {inp.get('channel')} is not in DESK_EXTERNAL_CHANNELS."}
-        env = envelopes.from_intake_item(inp)
+        env = dict(envelopes.from_intake_item(inp), work_item_id=hub.work_item.id)
         opened = hub.work_item.checkpoint("intake", lambda: cases.intake(hub_dir, env))
         hub.work_item.checkpoint("origin", lambda: remember_origin(hub_dir, opened["case_id"]))
     elif kind == "helpdesk":
@@ -130,6 +131,9 @@ def triage_item(inp: dict | None = None) -> dict:
                 input={"kind": "case", "case_id": o["case_id"], "seq": o["seq"]}, requester=inp["opened_by"]))
             started.append({"case": o["number"], "work_item": item["id"]})
         return {"state": "split", "cases": started}
+    elif kind == "page":
+        # Desk roles changed: republish this case's page for the current readers only.
+        return {"state": "page", "page": publish_case_page(hub_dir, inp["case_id"])}
     elif kind in ("rerun", "bound", "case", "decision"):
         opened = {"case_id": inp["case_id"], "seq": inp.get("seq")}
         trigger = inp.get("reason") or kind
@@ -150,6 +154,8 @@ def triage_item(inp: dict | None = None) -> dict:
                                        "complete. Fix model access, then rerun.")
             return {"state": "triaging", "error": exc.code}
         return hub.work_item.checkpoint("station-failed", fail)
+    if result.get("state") == "outdated":
+        return result          # the newer triage of this case publishes and writes back
     publish_case_page(hub_dir, opened["case_id"])
     case = store.get_case(store.connect(hub_dir), opened["case_id"])
     if case["surface"] == "helpdesk" and values["DESK_HELPDESK"] == "zoho_desk":
@@ -178,9 +184,26 @@ def _hub_dir() -> Path:
     return Path(_ctx().hub_dir)
 
 
+#: Who may open a case page: the people who may see the case in chat.
+PAGE_ROLES = ("desk_operator", "desk_delivery", "desk_complaints", "desk_exceptions", "desk_bindings",
+              "manage_access")
+
+
+def page_readers(hub_dir: Path, hub_name: str) -> list[str]:
+    """Every account that holds a desk role in this hub now, sorted. A case
+    page is shared with exactly these people, never with the whole hub."""
+    from hubzoid.access import store_for
+
+    gs = store_for(Path(hub_dir))
+    subjects = sorted({s for s, h, _p in gs.list_grants() if h in (hub_name, "*") and "@" in s})
+    return [s for s in subjects if any(gs.can(s, hub_name, role) for role in PAGE_ROLES)]
+
+
 def publish_case_page(hub_dir: Path, case_id: str) -> dict | None:
     """The case as one page in Hubzoid's artifact viewer, one link per case
-    that always shows the newest revision."""
+    that always shows the newest revision, readable only by desk role holders.
+    Older copies are deleted, so a person who lost their role cannot open an
+    earlier one. A failure is recorded on the case and never stops triage."""
     from hubzoid import hub
 
     from . import casepage
@@ -188,19 +211,72 @@ def publish_case_page(hub_dir: Path, case_id: str) -> dict | None:
     view = views.case(hub_dir, case_id)
     if view is None:
         return None
-    path = Path(hub.run_dir) / f"case-{view['case']['number']}.html"
+    number = view["case"]["number"]
+    path = Path(hub.run_dir) / f"case-{number}.html"
     path.write_text(casepage.render(view))
-    digest = casepage.digest(view)
+    readers = page_readers(hub_dir, hub.name)
+    digest = casepage.digest(view) + ":" + hashlib.sha256(",".join(readers).encode()).hexdigest()[:16]
     try:
-        page = hub.publish_artifact(str(path), title=f"Case {view['case']['number']}",
-                                    key=f"case-{view['case']['number'].lower()}", digest=digest, audience="hub")
+        if readers:
+            page = hub.publish_artifact(str(path), title=f"Case {number}", key=f"case-{number.lower()}",
+                                        digest=digest, audience="people", share_with=readers)
+        else:
+            page = hub.publish_artifact(str(path), title=f"Case {number}", key=f"case-{number.lower()}",
+                                        digest=digest, audience="owner")
+        _prune_older_pages(hub_dir, page)
     except Exception as exc:  # noqa: BLE001 - the page is a view; the case itself is saved
-        return {"error": type(exc).__name__}
+        with store.tx(hub_dir) as conn:
+            store.audit(conn, "desk", "case_page_failed", case_id, {"error": type(exc).__name__,
+                                                                    "message": str(exc)[:300]})
+        return {"error": type(exc).__name__, "message": str(exc)[:300]}
     url = (page or {}).get("latest_url") or (page or {}).get("url")
     if url:
         with store.tx(hub_dir) as conn:
             conn.execute("UPDATE cases SET page_url=? WHERE id=?", (url, case_id))
+            conn.execute("INSERT INTO cursor(name, value) VALUES ('page_readers', ?) ON CONFLICT(name) DO UPDATE "
+                         "SET value=excluded.value", (",".join(readers),))
     return page
+
+
+def _prune_older_pages(hub_dir: Path, page: dict | None) -> None:
+    """Keep one copy per case page: the run's own account deletes the older ones."""
+    from sqlalchemy import text
+
+    from hubzoid import artifacts
+
+    latest = artifacts.get(hub_dir, (page or {}).get("id") or "")
+    if latest is None or not latest.series_id:
+        return
+    with artifacts._engine(hub_dir).connect() as c:
+        ids = [r[0] for r in c.execute(text("SELECT id FROM hz_artifacts WHERE series_id=:s AND deleted IS NULL "
+                                            "AND id != :a"), {"s": latest.series_id, "a": latest.id}).fetchall()]
+    for old in ids:
+        art = artifacts.get(hub_dir, old)
+        if art is not None and art.owner == latest.owner:
+            artifacts.delete(hub_dir, art, latest.owner)
+
+
+def refresh_pages_if_readers_changed(hub_dir: Path, start, *, limit: int = 100) -> int:
+    """When desk roles change, republish case pages for the new set of readers
+    (run every minute by desk_upkeep). Each refresh is a small triage work item,
+    so the page stays in its own workflow's series."""
+    conn = store.connect(hub_dir)
+    hub_name = Path(hub_dir).name.lower()
+    readers = ",".join(page_readers(hub_dir, hub_name))
+    row = conn.execute("SELECT value FROM cursor WHERE name='page_readers'").fetchone()
+    if row is None or row["value"] == readers:
+        return 0
+    tag = hashlib.sha256(readers.encode()).hexdigest()[:12]
+    n = 0
+    for c in store.rows(conn.execute("SELECT id FROM cases WHERE page_url IS NOT NULL ORDER BY updated DESC LIMIT ?",
+                                     (limit,))):
+        try:
+            start("customer_desk_intake", key=f"page:{c['id']}:{tag}", route="triage",
+                  input={"kind": "page", "case_id": c["id"]}, requester="")
+            n += 1
+        except Exception:  # noqa: BLE001 - the next tick tries again
+            continue
+    return n
 
 
 # -- the helpdesk ----------------------------------------------------------------------------
@@ -219,10 +295,11 @@ def helpdesk_intake(hub_dir: Path, values: dict, ticket_id: str) -> dict | None:
         dept = values.get("ZOHO_DESK_DEPARTMENT_ID") or ""
         if dept and str(got["ticket"].get("departmentId")) != dept:
             return None
-        if not desk.claim_message(hub_dir, got["ticket"], str(got["inbound"]["id"])):
+        item_id = hub.work_item.id
+        if not desk.claim_message(hub_dir, got["ticket"], str(got["inbound"]["id"]), owner=item_id):
             return None
-        env = envelopes.from_helpdesk(got["ticket"], got["inbound"],
-                                      synthetic=config.namespace(values) == "sample")
+        env = dict(envelopes.from_helpdesk(got["ticket"], got["inbound"],
+                                           synthetic=config.namespace(values) == "sample"), work_item_id=item_id)
         opened = cases.intake(hub_dir, env)
         desk.link_case(hub_dir, ticket_id, opened["case_id"])
         return opened
@@ -298,10 +375,12 @@ def helpdesk_writeback(hub_dir: Path, values: dict, case: dict) -> dict:
             raise NotSent(str(exc)) from None
 
     def note_reconcile(args):
-        for c in reader.comments(ticket_id):
+        # A complete listing without the marker proves the note is not there.
+        comments, complete = reader.all_comments(ticket_id)
+        for c in comments:
             if mark in (c.get("content") or ""):
                 return Reconciled("applied", {"id": c.get("id")})
-        return Reconciled("safe_to_retry")
+        return Reconciled("safe_to_retry" if complete else "unknown")
 
     try:
         hub.operation.run(name="helpdesk_note", target={"ticket": ticket_id}, arguments={"content": note},
@@ -330,7 +409,13 @@ def helpdesk_writeback(hub_dir: Path, values: dict, case: dict) -> dict:
 def helpdesk_draft(hub_dir: Path, values: dict, case: dict, reply: dict) -> str:
     from hubzoid import hub
     from hubzoid.work_items import OperationFailed, WorkItemError
+    from hubzoid.work_items import config as wi_config
 
+    # Unattended triage writes an unsent draft only. Any other mode would park
+    # for an approval nobody attends, so it writes nothing and says why.
+    mode = wi_config.mode_for(wi_config.load(hub_dir), ["customer_reply.send"], "zoho_desk")
+    if mode != "draft":
+        return f"not written: customer_reply.send is {mode} for zoho_desk, and the helpdesk takes drafts only"
     pl = replies.payload(hub_dir, case, reply)
     try:
         result = hub.operation.run(name="customer_reply", target={"case": case["number"], "reply": reply["revision"]},
@@ -373,7 +458,9 @@ def case_item() -> dict:
     reply = store.get_reply(conn, case["id"], int(inp["reply_revision"]))
     if reply is None or reply["digest"] != inp["digest"]:
         return {"state": "reply_stale", "message": "The reply changed after the request. Nothing was sent."}
-    if action == "send" and reply["state"] != "requested":
+    if action == "send" and reply["state"] not in ("requested", "ambiguous"):
+        # "ambiguous" is a send whose outcome its requester is deciding on the
+        # Work items page: the operation settles it, never this guard.
         return {"state": "reply_stale", "message": f"Reply {reply['revision']} is {reply['state']}. Nothing was sent."}
     loaded = pipeline.load(hub_dir)
     stale = hub.work_item.checkpoint("recheck", lambda: recheck.changed_facts(hub_dir, case, store.get_facts(
@@ -389,16 +476,7 @@ def case_item() -> dict:
     # what a person wants, so no target_version re-park is used here.
 
     def dispatch(args):
-        fresh = store.get_case(store.connect(hub_dir), case["id"])
-        if fresh["current_reply"] != reply["revision"]:
-            raise Rejected("reply_stale: a newer reply or customer message replaced this one.")
-        if recheck.changed_facts(hub_dir, fresh, store.get_facts(store.connect(hub_dir), case["id"], reply["resolution"]),
-                                 policy=loaded.policy):
-            raise Rejected("reply_stale: ERPNext changed after approval.")
-        current = pipeline.load(hub_dir)
-        res = store.get_resolution(store.connect(hub_dir), case["id"], reply["resolution"])
-        if current.policy.digest != res["policy_digest"] or current.style.digest != res["style_digest"]:
-            raise Rejected("reply_stale: the policy or reply style changed after this reply was drafted.")
+        fresh = dispatch_check(hub_dir, case, reply, requester, loaded)
         if channel == "sample-whatsapp" and not replies.whatsapp_window_open(hub_dir, fresh):
             raise Rejected("window_closed: WhatsApp allows a free-form reply only within 24 hours of the "
                            "customer's last message.")
@@ -429,7 +507,7 @@ def case_item() -> dict:
         kwargs = dict(dispatch=replies.refuse_helpdesk_send, draft=replies.zoho_draft(hub_dir, values, case, reply),
                       reconcile=replies.zoho_reconcile(hub_dir, values, case, reply))
     else:
-        return channel_send(hub_dir, case, reply, requester, action)
+        return channel_send(hub_dir, case, reply, requester, action, loaded)
     try:
         result = hub.operation.run(name="customer_reply", target={"case": case["number"], "reply": reply["revision"]},
                                    arguments=pl, recovery="reconcile", actions="customer_reply.send", channel=channel,
@@ -440,6 +518,39 @@ def case_item() -> dict:
             _redraft(hub_dir, case, requester, reason="stale_at_dispatch")
         return out
     return hub.work_item.checkpoint("settle", lambda: _settled(hub_dir, case, reply, action, result, requester))
+
+
+def dispatch_check(hub_dir: Path, case: dict, reply: dict, requester: str, loaded) -> dict:
+    """Everything that must still hold the moment a reply leaves, after the
+    requester approved it: it is still the current reply, the sender still
+    resolves to the same customer, the requester still holds the case and a
+    desk role, and the ERP facts, policy and reply style are unchanged.
+    Raises Rejected, so nothing is sent and the desk redrafts."""
+    from hubzoid.access import store_for
+    from hubzoid.work_items import Rejected
+
+    from . import scope
+
+    conn = store.connect(hub_dir)
+    fresh = store.get_case(conn, case["id"])
+    if fresh["current_reply"] != reply["revision"]:
+        raise Rejected("reply_stale: a newer reply or customer message replaced this one.")
+    if fresh["origin_kind"] == "external" and scope.current_customer(hub_dir, fresh) != case["customer_id"]:
+        raise Rejected("reply_stale: the sender's binding changed after approval.")
+    if fresh["claimed_by"] != requester:
+        raise Rejected("claim_lost: the person who asked no longer holds this case.")
+    gs = store_for(Path(hub_dir))
+    hub_name = Path(hub_dir).name.lower()
+    if not (gs.can(requester, hub_name, "desk_operator") or gs.can(requester, hub_name, "manage_access")):
+        raise Rejected("role_lost: the person who asked no longer holds the desk operator role.")
+    if recheck.changed_facts(hub_dir, fresh, store.get_facts(conn, case["id"], reply["resolution"]),
+                             policy=loaded.policy):
+        raise Rejected("reply_stale: ERPNext changed after approval.")
+    current = pipeline.load(hub_dir)
+    res = store.get_resolution(conn, case["id"], reply["resolution"])
+    if current.policy.digest != res["policy_digest"] or current.style.digest != res["style_digest"]:
+        raise Rejected("reply_stale: the policy or reply style changed after this reply was drafted.")
+    return fresh
 
 
 def _redraft(hub_dir: Path, case: dict, requester: str, *, reason: str, stale=None) -> None:
@@ -526,6 +637,10 @@ def _failed(hub_dir, case, reply, action, exc, requester):
             store.set_reply_state(conn, case["id"], reply["revision"], "rejected")
             store.update_case(conn, case["id"], state="in_review")
             status = "rejected"
+        elif "claim_lost" in text or "role_lost" in text:
+            store.set_reply_state(conn, case["id"], reply["revision"], "ready")
+            store.update_case(conn, case["id"], state="needs_owner", claimed_by=None, note=f"Not sent: {text[:200]}")
+            status = "claim_lost" if "claim_lost" in text else "role_lost"
         elif "reply_stale" in text:
             store.set_reply_state(conn, case["id"], reply["revision"], "superseded")
             store.update_case(conn, case["id"], state="needs_owner", note="The reply went out of date before sending. "
@@ -540,24 +655,56 @@ def _failed(hub_dir, case, reply, action, exc, requester):
     return {"state": status, "message": text[:500]}
 
 
-def channel_send(hub_dir: Path, case: dict, reply: dict, requester: str, action: str = "send") -> dict:
+def channel_send(hub_dir: Path, case: dict, reply: dict, requester: str, action: str = "send",
+                 loaded=None) -> dict:
     """A Hubzoid email or WhatsApp channel: the reply goes back on the case's
-    stored origin thread through `hub.thread.post`, text only."""
+    stored origin thread through `hub.thread.post`, text only.
+
+    `hub.thread.post` takes no dispatch hook, so the dispatch-time check runs
+    here, outside any checkpoint, right before the post: on the first run, and
+    again when the work resumes after the requester's approval, which is the
+    moment the post would send. A failed check abandons the approved post, so
+    nothing waits or leaves."""
     from hubzoid import hub
-    from hubzoid.work_items import OperationFailed
+    from hubzoid.work_items import OperationFailed, Rejected
 
     if reply["attachments"]:
         return {"state": "attachments_unsupported",
                 "message": "Hubzoid channel replies carry text only. Save the reply as a draft, or send it with the "
                            "attachment from your own mailbox."}
     try:
-        posted = hub.thread.post(reply["rendered"], key=f"desk:{case['id']}:{reply['revision']}:{action}")
+        dispatch_check(hub_dir, case, reply, requester, loaded or pipeline.load(hub_dir))
+    except Rejected as exc:
+        _abandon_waiting_posts(hub_dir, hub.work_item.id, str(exc))
+        out = hub.work_item.checkpoint("settle-refused", lambda: _failed(hub_dir, case, reply, action, exc, requester))
+        if out.get("state") == "reply_stale":
+            _redraft(hub_dir, case, requester, reason="stale_at_dispatch")
+        return out
+    try:
+        # Both actions govern the post, so the stricter of the two write modes applies.
+        posted = hub.thread.post(reply["rendered"], key=f"desk:{case['id']}:{reply['revision']}:{action}",
+                                 actions="customer_reply.send")
     except OperationFailed as exc:
         return hub.work_item.checkpoint("settle-failed", lambda: _failed(hub_dir, case, reply, action, exc, requester))
     result = (posted[0] if isinstance(posted, list) and posted else posted) or {}
     if not isinstance(result, dict):
         result = {"result": result}
     return hub.work_item.checkpoint("settle", lambda: _settled(hub_dir, case, reply, action, result, requester))
+
+
+def _abandon_waiting_posts(hub_dir: Path, item_id: str, reason: str) -> None:
+    """Close this item's channel posts that wait for, or hold, an approval that
+    can no longer be used, so none of them stays on the Work items page."""
+    from hubzoid.work_items import store as wi_store
+
+    for op in wi_store.list_ops(hub_dir, Path(hub_dir).name.lower(), item_id=item_id):
+        if op["state"] == "awaiting_approval" and str(op.get("name", "")).startswith("channel."):
+            try:
+                wi_store.update_op(hub_dir, op["id"], expect_state=("awaiting_approval",), state="abandoned",
+                                   resolution_json={"decision": "abandon", "by": "desk", "reason": reason[:300],
+                                                    "at": wi_store.now()})
+            except Exception:  # noqa: BLE001 - decided meanwhile: it was never dispatched by this run
+                continue
 
 
 def cancel_pending_sends(hub_dir: Path, case_id: str) -> list[str]:

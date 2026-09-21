@@ -339,6 +339,7 @@ def grade(hub: Path, case: dict, state: dict, before: str) -> dict:
         want("decisions_approved", n)
     if "outbox" in exp:
         want("outbox", len(outbox))
+    problems += outbox_problems(hub, c, outbox)
     if "reopen_count" in exp:
         want("reopen_count", c["reopen_count"])
     if "current_reply_min" in exp and (c["current_reply"] or 0) < exp["current_reply_min"]:
@@ -353,8 +354,11 @@ def grade(hub: Path, case: dict, state: dict, before: str) -> dict:
                                                          (res or {}).get("requests") or []):
             problems.append(f"note missing {text!r}")
     if "station_calls" in exp:
-        n = conn.execute("SELECT COUNT(*) AS n FROM item_cases WHERE case_id=?", (c["id"],)).fetchone()["n"]
-        want("station_calls", n)
+        # The model calls Hubzoid recorded for this hub, not the desk's own bookkeeping.
+        want("station_calls", station_calls(hub))
+        mapped = conn.execute("SELECT COUNT(*) AS n FROM item_cases WHERE case_id=?", (c["id"],)).fetchone()["n"]
+        if exp["station_calls"] == 0 and mapped:
+            problems.append(f"{mapped} triage runs opened ERP reads for the case")
     if "facts" in exp:
         want("facts", conn.execute("SELECT COUNT(*) AS n FROM facts WHERE case_id=?", (c["id"],)).fetchone()["n"])
     if "operations_waiting" in exp:
@@ -364,6 +368,10 @@ def grade(hub: Path, case: dict, state: dict, before: str) -> dict:
     for t in exp.get("must_include") or []:
         if t not in text:
             problems.append(f"reply lacks {t!r}")
+    delivered = " ".join(r["body"] for r in outbox)
+    for t in exp.get("outbox_must_include") or []:
+        if t not in delivered:
+            problems.append(f"the delivered reply lacks {t!r}")
     for t in exp.get("must_not_include") or []:
         if t.lower() in all_text.lower():
             problems.append(f"forbidden text {t!r} appeared")
@@ -374,6 +382,49 @@ def grade(hub: Path, case: dict, state: dict, before: str) -> dict:
         problems.append(f"the current reply fails checks: {failed}")
     return {"passed": not problems, "problems": problems, "final_state": c["state"], "categories": cats,
             "outcomes": outs, "reply_author": (reply or {}).get("author_kind")}
+
+
+def station_calls(hub: Path) -> int:
+    from sqlalchemy import text
+
+    from hubzoid.stations import service as stations
+
+    with stations._engine(hub).connect() as c:
+        return c.execute(text("SELECT COUNT(*) FROM hz_station_calls")).scalar() or 0
+
+
+def outbox_problems(hub: Path, c: dict, outbox: list[dict]) -> list[str]:
+    """Every delivered message went to the case's own sender, carries exactly
+    the body and digest of a sent reply, and was approved by its requester on
+    the operation for that exact content."""
+    from hubzoid.work_items import store as wi_store
+
+    from customer_desk import store
+
+    conn = store.connect(hub)
+    out = []
+    for row in outbox:
+        if row["case_id"] != c["id"]:
+            out.append(f"outbox {row['id']} belongs to another case")
+            continue
+        if row["recipients"] != [c["sender_key"]]:
+            out.append(f"outbox {row['id']} went to {row['recipients']}, not the sender {c['sender_key']}")
+        reply = store.get_reply(conn, c["id"], row["reply_revision"])
+        if reply is None or reply["state"] != "sent" or reply["digest"] != row["digest"] or \
+                reply["rendered"] != row["body"]:
+            out.append(f"outbox {row['id']} does not match sent reply {row['reply_revision']}")
+        elif not (reply["checks"] or {}).get("passed"):
+            out.append(f"outbox {row['id']} delivered reply {row['reply_revision']}, which failed its checks")
+        if row["approved_by"] != OWNER:
+            out.append(f"outbox {row['id']} was approved by {row['approved_by']!r}, not the requester")
+        send = conn.execute("SELECT work_item_id FROM sends WHERE case_id=? AND reply_revision=? AND mode='approve'",
+                            (c["id"], row["reply_revision"])).fetchone()
+        ops = wi_store.list_ops(hub, hub.name.lower(), item_id=send["work_item_id"]) if send else []
+        approved = [o for o in ops if o["state"] == "succeeded" and (o.get("approval_json") or {}).get("approver")
+                    == OWNER and (o.get("approval_json") or {}).get("digest") == o["args_digest"]]
+        if not approved:
+            out.append(f"outbox {row['id']} has no operation approved by {OWNER} for its exact content")
+    return out
 
 
 def pass_hat(n: int, c: int, k: int) -> float:

@@ -155,12 +155,17 @@ def zoho_draft(hub_dir: Path, values: dict, case: dict, reply: dict, *, transpor
             return {"provider_draft_id": existing, "ticket_id": ticket_id, "reconciled": True}
         if decision != "write":
             raise Rejected(f"draft_not_written: {decision}")
+        # The draft goes only to the sender this case is bound to. A ticket whose
+        # contact changed since is left for a person.
+        ticket = reader.ticket(ticket_id)
+        to = case["sender_key"]
+        if not to or (ticket.get("email") or "").strip().lower() != to.lower():
+            raise Rejected("recipient_changed: the ticket's contact is no longer the bound sender of "
+                           f"{case['number']}. Check the ticket in Zoho Desk.")
         ids = []
         for name, data, media in attachment_payloads(hub_dir, reply["attachments"]):
             up = writer.upload(name, data, media)
             ids.append(str(up["id"]))
-        ticket = reader.ticket(ticket_id)
-        to = ticket.get("email")
         try:
             th = writer.draft_reply(ticket_id, from_address=values.get("ZOHO_DESK_FROM_ADDRESS") or "support@desk.example",
                                     to=to, html=desk.draft_html(args["body"], mark), in_reply_to=inbound_id,
@@ -178,12 +183,15 @@ def zoho_reconcile(hub_dir: Path, values: dict, case: dict, reply: dict, *, tran
     from .helpdesk import desk, zoho
 
     def check(args):
+        # Only a complete listing without the marker is proof the draft is not
+        # there. A ticket too long to read in full is left to its requester.
         reader, _ = desk.readers(hub_dir, values, transport=transport)
         mark = zoho.marker(case["helpdesk_ticket_id"], f"{case['id']}:{reply['revision']}")
-        for t in reader.threads(case["helpdesk_ticket_id"]):
+        threads, complete = reader.all_threads(case["helpdesk_ticket_id"])
+        for t in threads:
             if t.get("status") == "DRAFT" and mark in (reader.thread(case["helpdesk_ticket_id"], t["id"]).get("content") or ""):
                 return Reconciled("applied", {"provider_draft_id": str(t["id"]), "reconciled": True}, {"thread": t["id"]})
-        return Reconciled("safe_to_retry")
+        return Reconciled("safe_to_retry" if complete else "unknown")
 
     return check
 
