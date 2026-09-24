@@ -1,0 +1,19 @@
+#!/bin/sh
+# Start the Customer Desk demo again. Sample mode only: the desk refuses a reset in live mode.
+#   demo/reset           clear the sample cases, owner items, sample outbox and sample ERP edits
+#   demo/reset --files   also restore knowledge/desk-policy.md, knowledge/customer-messages.md and work-items.yaml from Git
+set -e
+cd "$(dirname "$0")/.."
+PY=.venv/bin/python
+[ -x "$PY" ] || PY=python3
+"$PY" desk sample reset
+if [ "$1" = "--files" ]; then
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Not a Git checkout, so the files cannot be restored. Copy them from a fresh clone." >&2
+    exit 1
+  fi
+  echo "These files differ from Git and will be restored:"
+  git diff --stat -- knowledge/desk-policy.md knowledge/customer-messages.md work-items.yaml
+  git checkout -- knowledge/desk-policy.md knowledge/customer-messages.md work-items.yaml
+  echo "Restored. Restart the hub so it reads them."
+fi

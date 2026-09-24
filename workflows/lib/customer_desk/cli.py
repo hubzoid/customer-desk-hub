@@ -92,6 +92,7 @@ def cmd_sample_load(args, hub_dir):
     lines = [json.loads(x) for x in (hub_dir / args.file).read_text().splitlines() if x.strip()]
     if args.only:
         lines = [x for x in lines if x["provider_event_id"] in args.only.split(",")]
+    began = time.time()
     start = starter(hub_dir)
     via = args.via_helpdesk and values["DESK_HELPDESK"] == "zoho_desk"
     fake = fake_zoho_base(values) if via else None
@@ -110,10 +111,16 @@ def cmd_sample_load(args, hub_dir):
                      requester="")
         rows.append({"event": env["provider_event_id"], "case": opened["number"], "via": env["channel_id"],
                      "work_item": item["id"]})
+    settled = None
     if args.wait:
-        wait_settled(hub_dir, timeout=args.wait)
+        settled = wait_settled(hub_dir, timeout=args.wait)
+    took = round(time.time() - began)
     text = "\n".join(f"{r['case']}  {r['event']}  {r['via']}" for r in rows)
-    return out(args, {"bindings": {k: len(v) for k, v in plan.items()}, "loaded": rows},
+    if args.wait:
+        text += (f"\nAll {len(rows)} cases ready in {took // 60}m {took % 60:02d}s." if settled else
+                 f"\nStill working after {took // 60}m {took % 60:02d}s. Run desk list to follow.")
+    return out(args, {"bindings": {k: len(v) for k, v in plan.items()}, "loaded": rows, "seconds": took,
+                      "settled": settled},
                f"SYNTHETIC DATA. Bindings added {len(plan['adds'])}, conflicts {len(plan['conflicts'])}.\n{text}")
 
 
@@ -142,14 +149,16 @@ def helpdesk_ticket(hub_dir: Path, fake: str, env: dict) -> dict:
     raise SystemExit(f"Zoho ticket {t['id']} did not reach the desk within 120 seconds. Is the webhook set?")
 
 
-def wait_settled(hub_dir: Path, timeout: int) -> None:
+def wait_settled(hub_dir: Path, timeout: int) -> bool:
+    """True once no case is still being read, False at the timeout."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         n = store.connect(hub_dir).execute("SELECT COUNT(*) AS n FROM cases WHERE state IN ('received','triaging')"
                                            ).fetchone()["n"]
         if n == 0:
-            return
+            return True
         time.sleep(2)
+    return False
 
 
 def cmd_sample_erp_set(args, hub_dir):

@@ -93,6 +93,7 @@ Roles are granted per person in Settings, Agents, this agent, Access: desk opera
 ## More
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): how a message becomes a case, the stations, the checks, the write modes.
+- [demo/PROMPT.md](demo/PROMPT.md), [demo/CALL-SCRIPT.md](demo/CALL-SCRIPT.md) and `demo/reset`: the one prompt, a ten minute call, and starting again.
 - [docs/errors.md](docs/errors.md): every error code and what to do.
 - [docs/metrics.md](docs/metrics.md): what the measures count.
 - [.claude/skills/setup-customer-desk/SKILL.md](.claude/skills/setup-customer-desk/SKILL.md): setup steps for Claude Code and Codex. It sits outside `skills/` so the desk's own chat assistant does not load builder instructions.
