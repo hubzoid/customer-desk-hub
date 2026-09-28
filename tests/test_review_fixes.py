@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from conftest import LocalRunner, load_sample, triage_envelope
+from conftest import HUB as HUB_ROOT, LocalRunner, load_sample, triage_envelope
 from customer_desk import (actions, bindings, cases, chat, checks, envelopes, flows, intake_poll, pipeline, recheck,
                            scope, store)
 from customer_desk.erpnext import config as erp_config
@@ -305,3 +305,22 @@ def test_frappe_lists_page_and_mark_truncation(bound):
         assert len(cut) == 1 and cut.truncated
     finally:
         fake.stop()
+
+
+def test_send_request_refuses_a_reply_drafted_under_an_older_policy(bound):
+    case, reply, owner = _ready(bound)
+    policy = bound / "knowledge" / "desk-policy.md"
+    policy.write_text(policy.read_text() + "\nR19. Mention the order date in every status reply.\n")
+    started = []
+    with pytest.raises(actions.ActionError) as exc:
+        actions.request_send(bound, case["number"], owner, reply_revision=reply["revision"], digest=reply["digest"],
+                             expected_revision=None, start=lambda wf, **kw: started.append(kw) or {"id": "item-r"})
+    assert exc.value.code == "reply_stale" and started and started[0]["input"]["reason"] == "policy_changed"
+
+
+def test_the_example_email_channel_validates(hub):
+    from hubzoid.channels import config
+
+    text = (HUB_ROOT / "channels" / "support-email.yaml.example").read_text()
+    v = config.load_text(hub, text)
+    assert v.valid, v.errors

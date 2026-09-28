@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import time
 from pathlib import Path
 
@@ -116,7 +117,7 @@ def tags_for(view: dict, values: dict, kinds) -> list[str]:
     return sorted(set(tags))
 
 
-def note_for(view: dict, mark: str) -> str:
+def note_for(view: dict, mark: str, *, replace_draft: bool = False) -> str:
     case = view["case"]
     lines = [f"Customer Desk case {case['number']} ({case['state']}, queue {case.get('queue') or 'none'}).",
              "Internal note from the desk. Not visible to the customer.", ""]
@@ -136,7 +137,12 @@ def note_for(view: dict, mark: str) -> str:
             if s.get("backend") in ("policy", "desk"):
                 continue
             where = f"{s.get('doctype')} {s.get('name')}.{s.get('field')}" + (f" row {s['row_id']}" if s.get("row_id") else "")
-            shown = f["display"].replace("\n", " / ")
+            if f["kind"] in ("statement_table", "credit_note"):
+                ids = f["value"] if isinstance(f["value"], list) else [f["value"]]
+                shown = f"{len(ids)} {'credit notes' if f['kind'] == 'credit_note' else 'open invoices'}: {', '.join(ids)}"
+                where = f"{s.get('doctype')} outstanding_amount"
+            else:
+                shown = f["display"].replace("\n", " / ")
             lines.append(f"- {f['fact_id']} {shown[:120]}  [{where}, read {f['observed_at']}]")
         for t in view.get("tickets") or []:
             lines.append(f"Ticket {t['number']}: {t['severity']}, owned by {t['owner_role']}, {t['state']}.")
@@ -146,15 +152,42 @@ def note_for(view: dict, mark: str) -> str:
             lines.append("")
             lines.append(f"Proposed reply revision {reply['revision']}: checks "
                          f"{'passed' if not failed else 'failed: ' + ', '.join(failed)}.")
+            if replace_draft and not failed:
+                # The desk never edits or deletes a draft, so a newer reply
+                # travels in this note while an older desk draft is on the ticket.
+                lines += ["An earlier desk draft is on this ticket and is out of date. The desk does not edit or "
+                          "delete drafts. Replace that draft's text with this reply before you send it:", "",
+                          reply.get("rendered") or ""]
         if case.get("note"):
             lines.append(f"Desk notes: {case['note']}")
     lines += ["", mark]
     return "\n".join(lines)
 
 
+TABLE_RULE = re.compile(r"\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?")
+
+
 def draft_html(body: str, mark: str) -> str:
-    paras = "".join(f"<p>{html.escape(p).replace(chr(10), '<br>')}</p>" for p in body.split("\n\n") if p.strip())
-    return f"{paras}<!-- {mark} -->"
+    """The reply's Markdown as the helpdesk's HTML: paragraphs, line breaks,
+    bullet lists and tables (a statement), every value escaped."""
+    esc = html.escape
+    out = []
+    for block in body.split("\n\n"):
+        lines = [ln.rstrip() for ln in block.split("\n") if ln.strip()]
+        if not lines:
+            continue
+        if len(lines) >= 2 and all(ln.lstrip().startswith("|") for ln in lines):
+            rows = [[c.strip() for c in ln.strip().strip("|").split("|")] for ln in lines
+                    if not TABLE_RULE.fullmatch(ln.strip())]
+            head, rest = rows[0], rows[1:]
+            out.append("<table border='1' cellpadding='4' cellspacing='0'><tr>" + "".join(f"<th>{esc(c)}</th>" for c in head)
+                       + "</tr>" + "".join("<tr>" + "".join(f"<td>{esc(c)}</td>" for c in r) + "</tr>" for r in rest)
+                       + "</table>")
+        elif all(ln.lstrip().startswith(("- ", "* ")) for ln in lines):
+            out.append("<ul>" + "".join(f"<li>{esc(ln.lstrip()[2:])}</li>" for ln in lines) + "</ul>")
+        else:
+            out.append("<p>" + "<br>".join(esc(ln) for ln in lines) + "</p>")
+    return "".join(out) + f"<!-- {mark} -->"
 
 
 def preflight_draft(reader: zoho.Reader, ticket_id: str, inbound_id: str, mark: str) -> tuple[str, str | None]:

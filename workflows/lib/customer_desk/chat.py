@@ -8,6 +8,7 @@ the same content as text.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from . import actions, config, facts as facts_lib, policy as policy_lib, store, views
@@ -18,8 +19,22 @@ VIEW_ROLES = ("desk_operator", "desk_delivery", "desk_complaints", "desk_excepti
               actions.ADMIN)
 
 
+def _money_safe(value):
+    """Escape dollar signs in Markdown, so the chat never reads two amounts in
+    one paragraph ("$1,250.00 ... $1,250.00") as a math formula."""
+    if isinstance(value, dict):
+        return {k: (_escape(v) if k == "markdown" and isinstance(v, str) else _money_safe(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_money_safe(v) for v in value]
+    return value
+
+
+def _escape(text: str) -> str:
+    return re.sub(r"(?<!\\)\$", r"\\$", text)
+
+
 def _json(obj) -> str:
-    return json.dumps(obj, default=str)
+    return json.dumps(_money_safe(obj), default=str)
 
 
 def actor(hub_dir: Path) -> actions.Actor:
@@ -91,7 +106,8 @@ def show(hub_dir: Path, case_ref: str) -> str:
     c = view["case"]
     cv = views.compact(view)
     sections = [{"heading": f"{c['number']}: {c['state']}", "markdown": view["state_text"] + (
-        f"\n\nDesk notes: {c['note']}" if c.get("note") else "")}]
+        f"\n\nDesk notes: {c['note']}" if c.get("note") else "") + (
+        f"\n\nCase page (desk roles only): [{c['number']}]({c['page_url']})" if c.get("page_url") else "")}]
     if c["state"] == "binding_required":
         # No model reads an unbound message, the assistant included: only who
         # wrote and when. People read the text on the case page or in Intake.

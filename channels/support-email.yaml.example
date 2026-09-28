@@ -2,7 +2,9 @@
 # Copy to channels/support-email.yaml, fill in the mailbox, then apply it:
 #   hubzoid channels apply . --file channels/support-email.yaml --check
 #   hubzoid channels apply . --file channels/support-email.yaml --expected-revision absent
-# Add support-email to DESK_EXTERNAL_CHANNELS in hub.settings.yaml.
+# Add support-email to DESK_EXTERNAL_CHANNELS in hub.settings.yaml. A channel reads only its own
+# secrets, secret:channel/<hub folder name>/<channel id>/<name>: change customer-desk below to your
+# hub's folder name, and set the value with hubzoid secrets set ... --stdin.
 version: 1
 id: support-email
 provider: email
@@ -13,9 +15,9 @@ provider_config:
   transport: imap
   mailbox: support@your-company.example
   imap: {host: imap.your-company.example, port: 993, tls: implicit, username: support@your-company.example,
-         password_ref: "secret:hub/customer-desk/support-mailbox"}
+         password_ref: "secret:channel/customer-desk/support-email/password"}
   smtp: {host: smtp.your-company.example, port: 465, tls: implicit, username: support@your-company.example,
-         password_ref: "secret:hub/customer-desk/support-mailbox"}
+         password_ref: "secret:channel/customer-desk/support-email/password"}
   sender_policy:
     allowed: []            # ./desk bindings export lists the bound addresses to put here
     authentication: aligned_dkim

@@ -603,12 +603,13 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
                              station_label=runner.label)
             tconn.execute("UPDATE resolutions SET resolver=?, reviewer=?, review_rounds=? WHERE case_id=? AND revision=?",
                           (store.dumps(best.get("resolver")), store.dumps(review), rounds, case_id, rev))
-            store.update_case(tconn, case_id, state="needs_owner", queue=gathered["queue"], current_resolution=rev,
+            state = "in_review" if c.get("claimed_by") else "needs_owner"     # still held by its person
+            store.update_case(tconn, case_id, state=state, queue=gathered["queue"], current_resolution=rev,
                               current_reply=reply_rev, policy_digest=loaded.policy.digest,
                               note="; ".join(gathered["notes"]) or None)
             store.audit(tconn, "desk", "case_triaged", case_id, {"resolution": rev, "reply": reply_rev,
                                                                  "queue": gathered["queue"]})
-        return {"state": "needs_owner", "case_id": case_id, "resolution": rev, "reply": reply_rev,
+        return {"state": state, "case_id": case_id, "resolution": rev, "reply": reply_rev,
                 "queue": gathered["queue"], "digest": dg, "checks_passed": best["passed"],
                 "review": (review or {}).get("verdict")}
 

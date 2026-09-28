@@ -126,7 +126,7 @@ def test_fact_change_after_approval_refuses_the_send(bound, tmp_path):
         assert replies.outbox_rows(bound) == []
         deadline = time.time() + 120
         while time.time() < deadline:
-            c = wait_case(bound, number, ("needs_owner",), timeout=120)
+            c = wait_case(bound, number, ("needs_owner", "in_review"), timeout=120)   # the operator still holds it
             if c["current_reply"] and c["current_reply"] >= 2:
                 break
             time.sleep(0.5)
@@ -156,7 +156,7 @@ def test_new_customer_message_supersedes_a_pending_send(bound, tmp_path):
         start_work(bound)("customer_desk_intake", key=f"t:{opened['case_id']}:2", route="triage",
                           input={"kind": "case", "case_id": opened["case_id"], "seq": opened["seq"]}, requester="")
         wait_item(bound, out["work_item_id"], ("cancelled",), timeout=120)
-        c = wait_case(bound, number, ("needs_owner",), timeout=120)
+        c = wait_case(bound, number, ("in_review",), timeout=120)      # redrafted, still held by its operator
         assert store.get_reply(store.connect(bound), c["id"], 1)["state"] == "superseded"
         assert replies.outbox_rows(bound) == []
         assert wi_store.get_item(bound, out["work_item_id"])["state"] == "cancelled"

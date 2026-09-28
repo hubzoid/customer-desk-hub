@@ -80,11 +80,22 @@ def start_work(hub_dir: Path):
     """The `start` function actions use: Hubzoid work items, as the person."""
 
     def start(workflow: str, *, key: str, route: str, input: dict, requester: str, origin: dict | None = None) -> dict:
+        from hubzoid.work_items import WorkItemError
         from hubzoid.work_items import service as wi
 
         origin = origin or {"surface": "desk", "requested_by": requester, "acts_as": requester}
-        item, _ = wi.admit_and_start(hub_dir, workflow=workflow, key=key, route=route, input=input,
-                                     requester=requester, origin=origin)
+        args = dict(workflow=workflow, key=key, route=route, input=input, requester=requester, origin=origin)
+        try:
+            item, _ = wi.admit_and_start(hub_dir, **args)
+        except WorkItemError as exc:
+            if getattr(exc, "code", "") != "unavailable":
+                raise
+            # The engine is restarting. Hubzoid records the work before it
+            # looks for the engine, and runs it once the engine is back. The
+            # same admission again returns that recorded work, or raises if
+            # nothing was recorded.
+            item, _ = wi.admit(hub_dir, **args)
+            item = dict(item, queued=True)
         return item
 
     return start
@@ -335,6 +346,18 @@ def helpdesk_writeback(hub_dir: Path, values: dict, case: dict) -> dict:
         out.update(hub.work_item.checkpoint(f"helpdesk-preview-r{rev}", preview))
         return out
     reader, writer = desk.readers(hub_dir, values)
+    if mode == "live" and reply and (reply.get("checks") or {}).get("passed"):
+        def older_draft():
+            row = store.connect(hub_dir).execute("SELECT latest_inbound_id FROM helpdesk_tickets WHERE ticket_id=?",
+                                                 (str(ticket_id),)).fetchone()
+            try:
+                decision, _ = desk.preflight_draft(reader, ticket_id, row["latest_inbound_id"] if row else None, mark)
+            except zoho.ZohoError:
+                return False
+            return decision == "other_draft"
+
+        if hub.work_item.checkpoint(f"helpdesk-older-draft-r{rev}", older_draft):
+            note = desk.note_for(view, mark, replace_draft=True)
 
     def tags_dispatch(args):
         try:

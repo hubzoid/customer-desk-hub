@@ -191,3 +191,24 @@ def test_a_write_refreshes_a_revoked_token_once(hub, fake):
     f.tokens.clear()                            # the cached token was revoked
     w.associate_tags(t["id"], ["desk-order-status", "desk-low-confidence"])
     assert f.tags[t["id"]] == {"desk-order-status", "desk-low-confidence"}
+
+
+def test_draft_html_renders_statement_tables_and_escapes_values():
+    mark = zoho.marker("1", "k")
+    out = desk.draft_html("Hello,\n\n| Invoice | Outstanding |\n|---|---|\n| SYN-SINV-0001 | $1,250.00 <x> |\n\n"
+                          "- one\n- two\n\nKind regards,\nDesk", mark)
+    assert "<table" in out and "<td>SYN-SINV-0001</td>" in out and "&lt;x&gt;" in out
+    assert "<ul><li>one</li><li>two</li></ul>" in out and "<p>Kind regards,<br>Desk</p>" in out
+    assert zoho.MARKER_RE.search(out) and "|---" not in out
+
+
+def test_note_carries_the_new_reply_when_an_older_desk_draft_blocks_it():
+    view = {"case": {"number": "CD-000016", "state": "needs_owner", "queue": "delivery", "customer_id": "SYN-CUST-001"},
+            "resolution": {"requests": []}, "facts": [], "tickets": [],
+            "reply": {"revision": 2, "rendered": "Order SYN-SO-0001 is now due on January 27, 2000.",
+                      "checks": {"results": [{"id": "limits", "status": "pass"}]}}}
+    mark = zoho.marker("10002", "c:2")
+    plain = desk.note_for(view, mark)
+    assert "January 27" not in plain
+    note = desk.note_for(view, mark, replace_draft=True)
+    assert "Replace that draft's text" in note and "January 27, 2000" in note and zoho.MARKER_RE.search(note)

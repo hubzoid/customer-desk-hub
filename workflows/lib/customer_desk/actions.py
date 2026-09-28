@@ -23,6 +23,8 @@ from .erpnext import config as erp_config
 from .erpnext.contract import ERPContext, ERPError
 
 ADMIN = "manage_access"
+QUEUED = ("Recorded and queued: the workflow engine is restarting, and Hubzoid runs this work as soon as it is "
+          "back. Nothing needs to be asked again.")
 
 
 class ActionError(Exception):
@@ -261,6 +263,12 @@ def request_send(hub_dir: Path, ref: str, actor: Actor, *, reply_revision: int, 
                           "attaches " + ", ".join(a["name"] for a in reply["attachments"]) + ". Save it as a draft "
                           "in the mailbox, or edit the reply to send it without the attachment.", 422)
     _plan_ok(hub_dir, case)
+    res = store.get_resolution(store.connect(hub_dir), case["id"], reply["resolution"]) or {}
+    loaded = pipeline.load(hub_dir)
+    if (res.get("policy_digest"), res.get("style_digest")) != (loaded.policy.digest, loaded.style.digest):
+        rerun(hub_dir, ref, actor, instruction=None, start=start, reason="policy_changed")
+        raise ActionError("reply_stale", "The policy or reply style changed since this reply was drafted. A new "
+                          "revision is being drafted under the current rules. Review it.")
     stale = _stale_facts(hub_dir, case, reply)
     if stale:
         rerun(hub_dir, ref, actor, instruction=None, start=start, reason="facts_changed", stale=stale)
@@ -296,7 +304,8 @@ def request_send(hub_dir: Path, ref: str, actor: Actor, *, reply_revision: int, 
         store.audit(conn, actor.email, "send_request", case["id"], {"reply": reply["revision"], "item": item["id"]})
     return {"state": "human_action_required", "case": c["number"], "reply": reply["revision"], "digest": reply["digest"],
             "work_item_id": item["id"], "revision": c["revision"],
-            "message": "Approve the exact reply on the Work items page. Only you, the requester, can approve it."}
+            "message": "Approve the exact reply on the Work items page. Only you, the requester, can approve it."
+                       + (" " + QUEUED if item.get("queued") else "")}
 
 
 def _attach_item(conn, case_id: str, revision: int, mode: str, item_id: str, was: str, now: str) -> None:
@@ -360,7 +369,10 @@ def rerun(hub_dir: Path, ref: str, actor: Actor, *, instruction: str | None, sta
     item = start("customer_desk_intake", key=f"rerun:{case['id']}:{n}:{nonce}", route="triage",
                  input={"kind": "rerun", "case_id": case["id"], "instruction": instruction, "reason": reason},
                  requester=actor.email)
-    return {"case": case["number"], "state": "triaging", "work_item_id": item["id"], "resolution": n}
+    out = {"case": case["number"], "state": "triaging", "work_item_id": item["id"], "resolution": n}
+    if item.get("queued"):
+        out["note"] = QUEUED
+    return out
 
 
 def _customer(hub_dir: Path, customer_id: str) -> dict:

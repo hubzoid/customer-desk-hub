@@ -167,11 +167,16 @@ def metrics(hub_dir: Path) -> dict:
     resolved = [c for c in cases if c["state"] == "resolved"]
     reopened = [c for c in cases if c["reopen_count"]]
     times = []
+    # On the sample dataset's fixed clock a message's own time is in the
+    # dataset's past, so the response time counts from when the case reached
+    # the desk. On the system clock it counts from the message itself.
+    dataset_clock = values.get("DESK_CLOCK") == "dataset"
     for c in cases:
-        if c["first_reply_accepted_at"] and c["first_received_at"]:
-            a = dt.datetime.fromisoformat(c["first_received_at"].replace("Z", "+00:00"))
+        if c["first_reply_accepted_at"] and (c["first_received_at"] or dataset_clock):
+            a = (dt.datetime.fromtimestamp(c["created"], dt.timezone.utc) if dataset_clock else
+                 dt.datetime.fromisoformat(c["first_received_at"].replace("Z", "+00:00")))
             b = dt.datetime.fromisoformat(c["first_reply_accepted_at"].replace("Z", "+00:00"))
-            times.append((b - a).total_seconds() / 3600)
+            times.append(max((b - a).total_seconds(), 0) / 3600)
     sent = store.rows(conn.execute("SELECT s.*, r.resolution AS res FROM sends s JOIN replies r ON r.case_id=s.case_id "
                                    "AND r.revision=s.reply_revision WHERE s.status IN ('sent','succeeded')"))
     unedited = 0

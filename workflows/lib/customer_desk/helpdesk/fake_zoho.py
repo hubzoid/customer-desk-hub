@@ -353,12 +353,31 @@ class FakeZoho:
                     att = f" &middot; {len(x.get('attachmentIds') or [])} attachment(s)" if x.get("attachmentIds") else ""
                     parts.append(f"<div class='card draft'><small><b>Unsent draft reply</b> to {e(str(x.get('to')))} "
                                  f"from {e(x['fromEmailAddress'])}{att} &middot; {e(x['createdTime'])} &middot; "
-                                 f"a person edits and sends it</small><pre>{e(x['plainText'])}</pre></div>")
+                                 f"a person edits and sends it</small><div class=html>{_safe_html(x.get('content') or '')}"
+                                 "</div></div>")
                 else:
                     parts.append(f"<div class='card {'in' if x['direction'] == 'in' else ''}'><small>"
                                  f"{'Customer' if x['direction'] == 'in' else 'Agent'} &middot; {e(x['fromEmailAddress'])} "
                                  f"&middot; {e(x['createdTime'])}</small><pre>{e(x['plainText'])}</pre></div>")
             return head + "".join(parts) + "</main>"
+
+
+_ALLOWED = {"p", "br", "ul", "li", "table", "tr", "th", "td", "b", "strong", "em"}
+
+
+def _safe_html(content: str) -> str:
+    """Show a draft's HTML as a helpdesk would, keeping only plain formatting
+    tags, without attributes. Everything else is escaped."""
+    out = []
+    for part in re.split(r"(<[^>]*>)", content):
+        m = re.fullmatch(r"<(/?)([a-zA-Z]+)[^>]*>", part)
+        if m and m.group(2).lower() in _ALLOWED:
+            out.append(f"<{m.group(1)}{m.group(2).lower()}>")
+        elif part.startswith("<!--"):
+            continue
+        else:                       # text between tags is already escaped HTML
+            out.append(part.replace("<", "&lt;").replace(">", "&gt;"))
+    return "".join(out)
 
 
 def main() -> None:  # pragma: no cover - the local demo server
