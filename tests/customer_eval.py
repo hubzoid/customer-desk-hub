@@ -179,6 +179,8 @@ def settle(hub: Path, case_id: str, *, timeout: float = 600) -> dict:
         c = store.get_case(store.connect(hub), case_id)
         if c["state"] not in ("received", "triaging", "sending"):
             return c
+        if c["state"] == "triaging" and "station could not run" in (c.get("note") or ""):
+            return c                       # a station failed: graded as that, not as a timeout
         time.sleep(1)
     raise TimeoutError(f"case {case_id} did not settle within {timeout} seconds")
 
@@ -302,6 +304,8 @@ def grade(hub: Path, case: dict, state: dict, before: str) -> dict:
         if key in exp and exp[key] is not None and got != exp[key]:
             problems.append(f"{key}: expected {exp[key]!r}, got {got!r}")
 
+    if "station could not run" in (c.get("note") or ""):
+        problems.append(f"station failed: {c['note'][:200]}")
     want("state", c["state"])
     want("queue", c["queue"])
     cats = [o["category"] for o in (res or {}).get("requests") or []]
