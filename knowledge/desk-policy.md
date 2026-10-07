@@ -10,7 +10,7 @@ reply:
   never_say: ["refund approved", "guaranteed delivery", "compensation agreed"]
   composition: fluid
 facts:
-  id_patterns: ['SYN-[A-Z]+-[0-9]+']
+  id_patterns: ['SAL-ORD-[0-9]{4}-[0-9]{5}', 'ACC-SINV-[0-9]{4}-[0-9]{5}', 'SYN-[A-Z]+-[0-9]+', '\b[A-Z]{2,4}-[0-9]{3,5}\b']
 categories:
   order_status: {enabled: true, max_orders: 5, overdue_action: ticket}
   invoice_copy: {enabled: true, max_age_days: 730}
@@ -21,7 +21,7 @@ categories:
     availability: {disclosure: exact, limited_below: null}
   delivery_change: {enabled: true, min_notice_days: 2}
   complaint: {enabled: true, default_severity: normal}
-refunds: {basis: invoice_date, within_days: 30, outside_action: decision}
+refunds: {basis: invoice_date, within_days: 30, max_amount: 100, outside_action: decision}
 escalate_on: [legal_threat, safety_issue, personal_data_request, other_customer_data]
 escalation: {plan_review: required}
 ---
@@ -40,6 +40,7 @@ SYNTHETIC SAMPLE POLICY for Synthetic Meridian Distribution. Replace it with you
 
 - [R4] For an order status question we report the order status, the delivery date ERPNext holds, the share delivered, and per line the ordered and delivered quantities. Without an order number we report the customer's open orders, newest first, up to the limit in `categories.order_status.max_orders`.
 - [R5] We never promise a date later or earlier than the delivery date ERPNext holds. If the delivery date has passed and lines are still undelivered, the order is overdue. We open a ticket for the delivery team and tell the customer the team will update them, without giving a new date.
+- [R19] An order that is still a draft in ERPNext is not confirmed yet. We say so, give no date, and the operator confirms it first. An order cancelled in ERPNext is reported as cancelled, and an operator follows up. We never guess why.
 
 ## Invoice copies
 
@@ -64,7 +65,7 @@ SYNTHETIC SAMPLE POLICY for Synthetic Meridian Distribution. Replace it with you
 ## Complaints and refunds
 
 - [R14] Every complaint becomes a ticket owned by the complaint team, with at least the default severity. We acknowledge it, say who will follow up, and never admit fault or promise compensation.
-- [R15] A refund request within `refunds.within_days` days of the invoice date is passed to accounts, and we tell the customer accounts will confirm. Outside that window, the request goes to the exception team for a decision. We never say money will be returned unless a recorded decision approved it.
+- [R15] A refund request within `refunds.within_days` days of the invoice date, for an invoice of at most `refunds.max_amount`, is passed to accounts, and we tell the customer accounts will confirm. Outside that window, or above that amount, the request goes to the exception team for a decision. We never say money will be returned unless a recorded decision approved it.
 
 ## Escalation
 

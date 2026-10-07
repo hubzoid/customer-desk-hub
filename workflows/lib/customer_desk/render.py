@@ -49,7 +49,9 @@ def model_text(source: str) -> str:
 def safe_name(display: str | None) -> str:
     """A sanitised display name for the greeting: letters, spaces, apostrophes
     and hyphens only, at most 60 characters, else a neutral greeting."""
-    text = re.sub(r"[^\w '\-]", "", (display or "").split("<")[0], flags=re.UNICODE).strip()
+    # "Synthetic Harbor Foods (synthetic)": a label in brackets is not part of the name.
+    text = re.sub(r"\([^)]*\)", "", (display or "").split("<")[0])
+    text = re.sub(r"[^\w '\-]", "", text, flags=re.UNICODE).strip()
     text = re.sub(r"\d", "", text).strip()
     return text[:60] if len(text) >= 2 else "there"
 

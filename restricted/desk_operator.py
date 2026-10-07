@@ -77,7 +77,7 @@ def desk_rerun(case: str, instruction: str | None = None) -> str:
 @chat.guard
 def desk_open_case(customer_id: str, text: str) -> str:
     """Open an internal case for a named customer, for example a phone call: "SYN-CUST-002 called for a copy of
-    invoice SYN-SINV-0004". The reply is for the teammate to deliver. It is never sent."""
+    invoice ACC-SINV-2000-00004". The reply is for the teammate to deliver. It is never sent."""
     out = actions.open_internal(HUB, _a(), customer_id=customer_id, text=text, start=start_work(HUB))
     return chat.progress(out, "Opening an internal case and preparing a reply for you to deliver.")
 

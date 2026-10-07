@@ -5,7 +5,6 @@ values:
   DESK_CLOCK: dataset
   DESK_EXTERNAL_CHANNELS: [sample-email, sample-whatsapp]
   DESK_INTERNAL_SURFACES: [chat, transcript]
-  DESK_INVOICE_PRINT_FORMAT: Standard
   DESK_HELPDESK: none
   DESK_HELPDESK_MODE: dry-run
 secrets: {}

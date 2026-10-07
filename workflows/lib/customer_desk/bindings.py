@@ -16,6 +16,8 @@ from . import store
 
 KINDS = ("email", "whatsapp", "helpdesk")
 CSV_COLUMNS = ["company", "channel_kind", "sender", "customer_id", "source_ref"]
+#: The ERP dataset's own format (distributor-v1 bindings.csv), with the party type spelled out.
+PARTY_COLUMNS = ["company", "channel_kind", "sender", "party_type", "party_id", "source_ref"]
 MAX_IMPORT_ROWS = 10000
 E164 = re.compile(r"^\+[1-9][0-9]{6,14}$")
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -117,14 +119,23 @@ def plan_import(conn, text: str, *, company: str, customer_lookup) -> dict:
     """Read a bindings CSV and say what would happen, changing nothing.
     `customer_lookup(customer_id)` returns the ERP customer record or None."""
     reader = csv.DictReader(io.StringIO(text))
-    if reader.fieldnames is None or [c.strip() for c in reader.fieldnames] != CSV_COLUMNS:
-        raise BindingError("binding_invalid", f"The CSV columns must be exactly {','.join(CSV_COLUMNS)}.")
+    columns = [c.strip() for c in reader.fieldnames or []]
+    if columns not in (CSV_COLUMNS, PARTY_COLUMNS):
+        raise BindingError("binding_invalid", f"The CSV columns must be exactly {','.join(CSV_COLUMNS)}, or "
+                           f"{','.join(PARTY_COLUMNS)}.")
     adds, conflicts, rejects, existing = [], [], [], []
     seen: dict[tuple, str] = {}
     for n, raw in enumerate(reader, start=2):
         if n - 1 > MAX_IMPORT_ROWS:
             raise BindingError("payload_too_large", f"At most {MAX_IMPORT_ROWS} rows per import.")
-        r = {k: (v or "").strip() for k, v in raw.items()}
+        r = {k.strip(): (v or "").strip() for k, v in raw.items()}
+        if columns == PARTY_COLUMNS:
+            if r["party_type"].casefold() != "customer":
+                # The desk binds customers only. Supplier senders belong to the Order & Invoice Desk.
+                rejects.append({"line": n, "reason": f"{r['party_type'] or 'This'} rows are not customers. The "
+                                "Customer Desk binds customers only."})
+                continue
+            r["customer_id"] = r["party_id"]
         try:
             key = sender_key(r["channel_kind"], r["sender"])
         except BindingError as exc:

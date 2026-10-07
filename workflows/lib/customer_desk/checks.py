@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from . import ids
 from .render import NAMED, model_text, placeholders
 
 CURRENCY_SYMBOLS = "$€£¥₹₩₽₺₫₪₱฿₴₦"
@@ -35,11 +36,14 @@ def literal_values(text: str, id_patterns: list[str]) -> list[str]:
     ("7 units", "2 days"), a currency symbol or code, or a document id. Only a
     Markdown list marker at the start of a line is not a value."""
     text = LIST_MARKER.sub(" ", model_text(text or ""))
-    found = re.findall(r"\d(?:[\d,.]*\d)?", text)
-    found += [ch for ch in text if ch in CURRENCY_SYMBOLS]
-    found += [w for w in re.findall(r"\b[A-Z]{3}\b", text) if w in ISO_CURRENCIES]
-    for pat in id_patterns:
-        found += [m.group(0) for m in re.finditer(pat, text)]
+    found_ids = ids.find(text, id_patterns)
+    rest = text
+    for value in found_ids:                 # the digits of an id are the id, not more numbers
+        rest = re.sub(re.escape(value), " ", rest, flags=re.I)
+    found = re.findall(r"\d(?:[\d,.]*\d)?", rest)
+    found += [ch for ch in rest if ch in CURRENCY_SYMBOLS]
+    found += [w for w in re.findall(r"\b[A-Z]{3}\b", rest) if w in ISO_CURRENCIES]
+    found += found_ids
     out = []
     for f in found:
         if f not in out:
@@ -136,11 +140,7 @@ def run(*, case: dict, source: str, rendered: str, facts: dict, policy, author_k
             results[-1]["status"] = "warn"
     if "foreign_ids" in which:
         known = _fact_strings(facts)
-        foreign = []
-        for pat in pats:
-            for m in re.finditer(pat, rendered):
-                if m.group(0).upper() not in known:
-                    foreign.append(m.group(0))
+        foreign = [i for i in ids.find(rendered, pats) if i not in known]
         add("foreign_ids", not foreign, "Every document id is in the fact sheet." if not foreign else
             f"Document ids not in the fact sheet: {', '.join(sorted(set(foreign)))}.")
     if "freshness" in which:

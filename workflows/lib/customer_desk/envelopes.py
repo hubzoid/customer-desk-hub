@@ -7,18 +7,36 @@ the text is data. Trust comes only from the channel, never from the message.
 """
 from __future__ import annotations
 
+import re
+
 SAMPLE_CHANNELS = {"sample-email": ("email", "email"), "sample-whatsapp": ("whatsapp", "whatsapp")}
+#: The distributor-v1 dataset's channel ids, delivered to the desk's sample channels.
+DATASET_CHANNELS = {"email-inbox": "sample-email", "whatsapp": "sample-whatsapp"}
+SUBJECT = re.compile(r"^Subject: ([^\n]{1,300})\n\n", re.I)
+
+
+def split_subject(text: str, subject: str | None = None) -> tuple[str | None, str]:
+    """(subject, body). The dataset writes an email's subject as a leading
+    "Subject:" line of its text. A subject given separately wins."""
+    m = SUBJECT.match(text or "")
+    if m and subject is None:
+        return m.group(1).strip(), text[m.end():]
+    return subject, text
 
 
 def from_envelope(env: dict) -> dict:
-    """An IntakeEnvelope v1 line from the sample fixtures."""
-    channel = env["channel_id"]
+    """An IntakeEnvelope v1 line from the synthetic dataset (or a test). An
+    email's subject may lead its text as a "Subject:" line, as the dataset
+    writes it."""
+    channel = DATASET_CHANNELS.get(env["channel_id"], env["channel_id"])
     surface, kind = SAMPLE_CHANNELS.get(channel, ("email", "email"))
+    text, subject = env["text"], env.get("subject")
+    subject, text = split_subject(text, subject)
     return {"source_kind": "sample", "source_ref": env["provider_event_id"], "surface": surface,
             "channel_id": channel, "provider": env.get("provider") or channel, "thread_key": env.get("thread_key"),
             "sender": {"kind": kind, "address": env["sender"]["external_id"],
                        "display": env["sender"].get("display_name")},
-            "subject": env.get("subject"), "text": env["text"], "attachments": env.get("attachments") or [],
+            "subject": subject, "text": text, "attachments": env.get("attachments") or [],
             "received_at": env.get("received_at"), "synthetic": bool(env.get("synthetic", True)),
             "message_id": env.get("provider_message_id")}
 

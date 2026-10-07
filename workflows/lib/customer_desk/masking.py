@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 
+from . import ids
+
 EMAIL = re.compile(r"[\w.+'-]+@[\w-]+(?:\.[\w-]+)+")
 URL = re.compile(r"\bhttps?://([^\s/]+)[^\s]*", re.I)
 CARD = re.compile(r"\b(?:\d[ -]?){13,19}\b")
@@ -31,12 +33,12 @@ def mask(text: str, *, names: list[str] | None = None, id_patterns: list[str] | 
         return ""
     keep: dict[str, str] = {}
     out = text
-    for n, pat in enumerate(id_patterns or []):
-        def stash(m, n=n):
-            token = f"\x00{len(keep)}\x00"
-            keep[token] = m.group(0)
-            return token
-        out = re.sub(pat, stash, out)
+    # Document ids survive masking whole: the longest match at each place, so a
+    # customer reference inside a longer id is never split.
+    for value in sorted(ids.find(out, id_patterns or []), key=len, reverse=True):
+        token = f"\x00{len(keep)}\x00"
+        keep[token] = value
+        out = re.sub(re.escape(value), token, out, flags=re.I)
     out = URL.sub(lambda m: f"https://{m.group(1)}/[link]", out)
     out = EMAIL.sub("[email]", out)
     out = CARD.sub("[card number]", out)

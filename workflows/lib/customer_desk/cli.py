@@ -80,6 +80,16 @@ def _erp(hub_dir):
 
 # -- sample ---------------------------------------------------------------------------------
 
+DATASET = "distributor-v1"
+#: The four requests the sample routes through the fake Zoho Desk with --via-helpdesk.
+DEMO_HELPDESK = {"CD-011", "CD-016", "CD-018", "CD-020"}
+
+
+def dataset_file(hub_dir: Path, *parts: str) -> Path:
+    """A file of the vendored distributor-v1 dataset (workflows/lib/erp, VENDORED)."""
+    return erp_config.dataset_dir(hub_dir, DATASET).joinpath(*parts)
+
+
 def cmd_sample_load(args, hub_dir):
     values = config.settings(hub_dir)
     if config.namespace(values) != "sample":
@@ -87,9 +97,11 @@ def cmd_sample_load(args, hub_dir):
     if not values["DESK_INTAKE_ENABLED"]:
         return fail(args, "desk_setting_invalid", "DESK_INTAKE_ENABLED is false.")
     actor = local_actor(hub_dir, args.as_)
-    plan = import_bindings(hub_dir, (hub_dir / "fixtures" / "bindings.csv").read_text(), dry_run=False, synthetic=True,
-                           actor=actor)
-    lines = [json.loads(x) for x in (hub_dir / args.file).read_text().splitlines() if x.strip()]
+    plan = import_bindings(hub_dir, dataset_file(hub_dir, "bindings.csv").read_text(), dry_run=False,
+                           synthetic=True, actor=actor)
+    source = (hub_dir / args.file) if args.file else dataset_file(
+        hub_dir, "messages", "customer-desk-adversarial.jsonl" if args.adversarial else "customer-desk.jsonl")
+    lines = [json.loads(x) for x in source.read_text().splitlines() if x.strip()]
     if args.only:
         lines = [x for x in lines if x["provider_event_id"] in args.only.split(",")]
     began = time.time()
@@ -98,7 +110,7 @@ def cmd_sample_load(args, hub_dir):
     fake = fake_zoho_base(values) if via else None
     rows = []
     for env in lines:
-        if via and env.get("demo_route") == "helpdesk":
+        if via and (env.get("demo_route") == "helpdesk" or env["provider_event_id"] in DEMO_HELPDESK):
             opened = helpdesk_ticket(hub_dir, fake, env)
             rows.append({"event": env["provider_event_id"], "case": opened["number"], "via": "zoho_desk"})
             continue
@@ -135,9 +147,10 @@ def helpdesk_ticket(hub_dir: Path, fake: str, env: dict) -> dict:
     import httpx
 
     first, _, last = (env["sender"].get("display_name") or "").partition(" ")
-    t = httpx.post(f"{fake}/_fake/tickets", json={"subject": env.get("subject") or "Customer request",
-                                                  "text": env["text"], "email": env["sender"]["external_id"],
-                                                  "first": first, "last": last}, timeout=10).json()
+    subject, text = envelopes.split_subject(env["text"], env.get("subject"))
+    t = httpx.post(f"{fake}/_fake/tickets", json={"subject": subject or "Customer request", "text": text,
+                                                  "email": env["sender"]["external_id"], "first": first,
+                                                  "last": last}, timeout=10).json()
     deadline = time.time() + 120
     while time.time() < deadline:
         row = store.connect(hub_dir).execute("SELECT case_id FROM helpdesk_tickets WHERE ticket_id=?",
@@ -167,11 +180,8 @@ def cmd_sample_erp_set(args, hub_dir):
     cfg = erp_config.load(hub_dir)
     if config.namespace(values) != "sample" or cfg.backend != "sample":
         return fail(args, "desk_setting_invalid", "erp-set changes only the sample ERP, in sample mode.")
-    path = erp_config.sample_overlay(hub_dir)
-    data = json.loads(path.read_text()) if path.is_file() else {}
-    data.setdefault(args.resource, {}).setdefault(args.record, {})[args.field] = json.loads(args.value) \
-        if args.value[:1] in "[{\"" or args.value in ("true", "false", "null") else args.value
-    path.write_text(json.dumps(data, indent=2))
+    value = json.loads(args.value) if args.value[:1] in "[{\"" or args.value in ("true", "false", "null") else args.value
+    data = erp_config.sample_edit(hub_dir, args.resource, args.record, args.field, value)
     return out(args, data, f"SAMPLE ERP: {args.resource} {args.record}.{args.field} is now {args.value} "
                            "(as if a person changed it in ERPNext).")
 
@@ -180,14 +190,22 @@ def cmd_sample_reset(args, hub_dir):
     values = config.settings(hub_dir)
     if config.namespace(values) != "sample":
         return fail(args, "desk_setting_invalid", "Reset works only in sample mode. It never touches live cases.")
-    overlay = erp_config.sample_overlay(hub_dir)
-    if overlay.exists():
-        overlay.unlink()
+    if erp_config.load(hub_dir).backend == "sample":
+        erp_config.sample_reset(hub_dir)
     with store.tx(hub_dir) as conn:
         counts = store.reset_namespace(conn, "sample")
     for f in store.db_path(hub_dir).parent.glob("fault-*.used"):
         f.unlink()
     return out(args, counts, "Sample namespace reset: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
+
+
+def cmd_erp_configure(args, hub_dir):
+    """Apply connectors/erpnext.yaml as the next ERP configuration revision.
+    The file is validated by the ERP module and must be read only. Until it is
+    applied, the last applied revision stays in force (doctor reports drift)."""
+    applied = erp_config.apply_file(hub_dir, actor=local_actor(hub_dir, args.as_).email)
+    return out(args, {"revision": applied.revision, "digest": applied.digest},
+               f"ERP configuration revision {applied.revision} applied ({applied.config.backend}, read only).")
 
 
 # -- bindings -------------------------------------------------------------------------------
@@ -433,10 +451,13 @@ def main(argv=None) -> int:
     s.add_argument("record", nargs="?")
     s.add_argument("field", nargs="?")
     s.add_argument("value", nargs="?")
-    s.add_argument("--file", default="fixtures/intake/customer-desk-20.jsonl")
+    s.add_argument("--file", default=None, help="an IntakeEnvelope v1 file (default: the dataset's twenty requests)")
+    s.add_argument("--adversarial", action="store_true", help="load the dataset's six adversarial requests instead")
     s.add_argument("--only", default=None, help="comma separated provider event ids")
     s.add_argument("--via-helpdesk", action="store_true", help="send the helpdesk-routed requests through the fake Zoho Desk")
     s.add_argument("--wait", type=int, default=0, help="seconds to wait for triage to settle")
+
+    sub.add_parser("erp-configure", help="apply connectors/erpnext.yaml (read only)")
 
     b = sub.add_parser("bindings", help="sender bindings")
     b.add_argument("verb", choices=["list", "import", "export", "add", "revoke"])
@@ -508,7 +529,7 @@ def main(argv=None) -> int:
                                         "erp-set": cmd_sample_erp_set}[a.verb](a, h),
                 "bindings": cmd_bindings, "list": cmd_list, "show": cmd_show, "policy": cmd_policy,
                 "metrics": cmd_metrics, "outbox": cmd_outbox, "ledger": cmd_ledger, "stop-writes": cmd_stop,
-                "transcript": cmd_transcript, "preview": cmd_preview}
+                "transcript": cmd_transcript, "preview": cmd_preview, "erp-configure": cmd_erp_configure}
     handler = getattr(args, "handler", None) or handlers[args.cmd]
     try:
         return handler(args, hub_dir) or 0

@@ -34,7 +34,7 @@ DEFAULTS = {
         "delivery_change": {"enabled": True, "min_notice_days": 2},
         "complaint": {"enabled": True, "default_severity": "normal"},
     },
-    "refunds": {"basis": "invoice_date", "within_days": 30, "outside_action": "decision"},
+    "refunds": {"basis": "invoice_date", "within_days": 30, "max_amount": None, "outside_action": "decision"},
     "escalate_on": list(FLAGS),
     "escalation": {"plan_review": "required"},
 }
@@ -205,6 +205,9 @@ def parse(text: str, path: str = "knowledge/desk-policy.md") -> Policy:
     choice("categories.complaint.default_severity", ("low", "normal", "high", "critical"))
     choice("refunds.basis", ("invoice_date",))
     integer("refunds.within_days", 0, 3650)
+    cap = data_get(data, "refunds.max_amount")
+    if cap is not None and (isinstance(cap, bool) or not isinstance(cap, (int, float)) or cap <= 0):
+        bad("refunds.max_amount", f"max_amount is a positive amount in the invoice currency, or null, not {cap!r}.")
     choice("refunds.outside_action", ("decision",))
     esc = data["escalate_on"]
     if not isinstance(esc, list) or any(f not in FLAGS for f in esc):

@@ -6,9 +6,13 @@ greeting: "Hello [[sender_name]],"
 closing: "Kind regards,"
 templates:
   order_status.answer: |
-    Thank you for checking in. Order [[order]] is [[order_status]]. ERPNext shows a delivery date of [[delivery_date]] and [[per_delivered]] of the order delivered.
+    Thank you for checking in. Order [[order_ref]] is [[order_status]]. ERPNext shows a delivery date of [[delivery_date]] and [[per_delivered]] of the order delivered.
   order_status.overdue_ticket: |
-    Order [[order]] was due on [[delivery_date]] and some lines have not been delivered yet. I have asked our delivery team to look into it, and they will update you directly.
+    Order [[order_ref]] was due on [[delivery_date]] and some lines have not been delivered yet. I have asked our delivery team to look into it, and they will update you directly.
+  order_status.not_confirmed: |
+    Thank you for checking in. Order [[reference]] is with our team and is not confirmed yet. We will confirm the delivery date with you shortly.
+  order_status.cancelled: |
+    Order [[reference]] was cancelled in our system. A member of our team will contact you about it.
   invoice_copy.send_copy: |
     Please find attached a copy of invoice [[invoice]], dated [[posting_date]], for [[grand_total]]. The outstanding amount is [[outstanding]].
   invoice_copy.not_found: |
@@ -16,13 +20,13 @@ templates:
   account_statement.statement: |
     Here are the open invoices on your account. A CSV copy is attached.
   delivery_change.proposal: |
-    Thank you. I have passed your request to move order [[order]] to [[requested_date]] to our delivery team. I will confirm once the new date shows in our system.
+    Thank you. I have passed your request to move order [[order_ref]] to [[requested_date]] to our delivery team. I will confirm once the new date shows in our system.
   delivery_change.confirmed: |
-    Order [[order]] is now scheduled for delivery on [[delivery_date]], as you asked.
+    Order [[order_ref]] is now scheduled for delivery on [[delivery_date]], as you asked.
   delivery_change.declined: |
-    I am sorry, we cannot move order [[order]] to [[requested_date]]. Our delivery team will contact you about the options.
+    I am sorry, we cannot move order [[order_ref]] to [[requested_date]]. Our delivery team will contact you about the options.
   delivery_change.already_delivered: |
-    Order [[order]] has already been delivered in full, so its delivery date can no longer be changed.
+    Order [[order_ref]] has already been delivered in full, so its delivery date can no longer be changed.
   complaint.ticket: |
     I am sorry to hear about this. I have logged it as [[ticket]], and our complaints team will follow up with you.
   complaint.refund_to_accounts: |

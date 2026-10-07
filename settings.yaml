@@ -34,9 +34,6 @@ settings:
     description: false keeps new messages waiting without creating cases.
     type: boolean
     default: true
-  - name: DESK_INVOICE_PRINT_FORMAT
-    description: The ERPNext print format used for invoice copies.
-    default: Standard
   - name: DESK_MAX_REQUESTS_PER_CASE
     type: integer
     minimum: 1

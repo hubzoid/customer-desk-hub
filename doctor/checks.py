@@ -37,21 +37,25 @@ def _warn(summary, recovery=None):
 
 def erp_read_only(context):
     hub = _lib(context)
-    import yaml
-
     from customer_desk.erpnext import config as erp_config
 
     path = hub / "connectors" / "erpnext.yaml"
     if not path.is_file():
         return _fail("connectors/erpnext.yaml is missing.", "Copy the sample connector file from the README.")
-    problems = erp_config.problems(yaml.safe_load(path.read_text()) or {})
+    problems = erp_config.problems(path.read_text())
     if any(p["code"] == "erp_not_read_only" for p in problems):
         return _fail("erp_not_read_only: connectors/erpnext.yaml allows ERP writes. The Customer Desk only reads "
                      "ERPNext and mounts no ERP write tool.", "Set writes_enabled: false and remove "
                      "submit_credential_ref.")
     if problems:
-        p = problems[0]
-        return _fail(f"config_invalid: {p['field']}: {p['message']}", "Fix connectors/erpnext.yaml.")
+        return _fail(f"config_invalid: {problems[0]['message']}", "Fix connectors/erpnext.yaml.")
+    try:
+        cfg = erp_config.load(hub)
+    except Exception as exc:  # noqa: BLE001 - the applied revision, not the file, is what runs
+        return _fail(f"{getattr(exc, 'code', 'config_invalid')}: {getattr(exc, 'message', exc)}",
+                     "Fix connectors/erpnext.yaml and apply it.")
+    if cfg.drift:
+        return _warn(f"ERPNext connection is read only. {cfg.drift}", "Apply the file with ./desk erp-configure.")
     return _ok("ERPNext connection is read only.")
 
 
@@ -75,7 +79,7 @@ def erp_reads(context):
     try:
         cfg = erp_config.load(hub)
         backend = erp_config.backend(hub, cfg)
-        rows = backend.doctor(ERPContext(hub_id=hub.name.lower(), company=cfg.company))
+        rows = backend.doctor(ERPContext(hub_id=hub.name.lower(), company=cfg.company, principal="desk-doctor"))
     except ERPError as exc:
         return _fail(f"{exc.code}: {exc.message}", "Check the connector, the credential reference and that ERPNext "
                      "is reachable.")
@@ -100,7 +104,8 @@ def sample_data(context):
     folder = erp_config.dataset_dir(hub, cfg.dataset)
     manifest = folder / "manifest.json"
     if not manifest.is_file():
-        return _fail(f"The {cfg.dataset} dataset is missing at {folder}.", "Restore fixtures/erp from the hub repo.")
+        return _fail(f"The {cfg.dataset} dataset is missing at {folder}.", "Restore workflows/lib/erp from the hub "
+                     "repo (it is VENDORED, never edited here).")
     data = json.loads(manifest.read_text())
     changed = [name for name, digest in data.get("files", {}).items()
                if not (folder / name).is_file()
@@ -108,7 +113,7 @@ def sample_data(context):
     if changed:
         return _fail(f"sample_modified: {', '.join(changed)} differ from the dataset manifest.",
                      "Restore the files from the hub repo. Sample data is never edited in place.")
-    return _ok(f"SYNTHETIC DATA: {cfg.dataset} ({data.get('variant', 'canonical')}), clock {data.get('clock')}.")
+    return _ok(f"SYNTHETIC DATA: {cfg.dataset}, vendored from the Order & Invoice Desk, clock {data.get('clock')}.")
 
 
 def policy(context):

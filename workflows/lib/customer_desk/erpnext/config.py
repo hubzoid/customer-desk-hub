@@ -1,24 +1,27 @@
-"""`connectors/erpnext.yaml`: load, validate and build the read backend.
+"""The connector configuration as the desk uses it, and the desk's two rules on top.
 
-INTERIM until the canonical module is vendored. The keys follow HUB-108. This
-hub refuses `writes_enabled: true` outright (`erp_not_read_only`): it mounts
-no ERP write tool and never needs one.
+`connectors/erpnext.yaml` is the vendored module's file (erp/config.py): it
+validates it and keeps applied revisions in the hub's data folder. The desk
+adds what a read-only desk must hold: `writes_enabled` is false and no submit
+credential is set. `load` refuses anything else (`erp_not_read_only`), so the
+desk never even builds a client for a writable configuration.
 """
 from __future__ import annotations
 
-import ipaddress
+import json
+from contextlib import closing
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
 
-import yaml
+from erp import config as erp_config
+from erp.resources import RESOURCES
+from erp.service import ERPService
 
-from .contract import BACKENDS, ERPError
+from .contract import ERPError, not_found
 
-KEYS = {"version", "backend", "dataset", "site_url", "credential_ref", "submit_credential_ref", "company",
-        "currency", "warehouses", "selling_price_list", "buying_price_list", "writes_enabled", "timeout_seconds",
-        "read_attempts", "page_size", "private_network_cidrs"}
-FILE = Path("connectors") / "erpnext.yaml"
+FILE = erp_config.FILE
+BACKENDS = erp_config.BACKENDS
 
 
 @dataclass(frozen=True)
@@ -26,137 +29,116 @@ class ConnectorConfig:
     backend: str
     dataset: str | None
     site_url: str | None
-    credential_ref: str | None
     company: str
     currency: str
     warehouses: tuple[str, ...]
-    selling_price_list: str | None
-    writes_enabled: bool
-    timeout_seconds: int
-    read_attempts: int
-    page_size: int
-    path: str
+    selling_price_list: str
+    print_format: str | None
+    synthetic: bool
+    revision: int
+    drift: str | None
+    writes_enabled: bool = False
 
 
-def problems(data: dict) -> list[dict]:
-    """Every problem at once, each `{code, field, message}`."""
-    out: list[dict] = []
-
-    def bad(code, field, message):
-        out.append({"code": code, "field": field, "message": message})
-
-    if not isinstance(data, dict):
-        return [{"code": "config_invalid", "field": None, "message": "connectors/erpnext.yaml must be a mapping."}]
-    for key in sorted(set(data) - KEYS):
-        bad("config_invalid", key, f"Unknown key {key!r}. Allowed: {', '.join(sorted(KEYS))}.")
-    if data.get("version") != 1:
-        bad("config_invalid", "version", "version must be 1.")
-    backend = data.get("backend")
-    if backend not in BACKENDS:
-        bad("config_invalid", "backend", f"backend must be one of {', '.join(BACKENDS)}.")
-    if data.get("writes_enabled") is not False:
-        bad("erp_not_read_only", "writes_enabled",
-            "writes_enabled must be false. The Customer Desk only reads ERPNext and has no ERP write tool.")
-    if data.get("submit_credential_ref"):
-        bad("erp_not_read_only", "submit_credential_ref", "The Customer Desk never submits ERP documents. "
-            "Remove submit_credential_ref.")
-    if not isinstance(data.get("company"), str) or not data.get("company"):
-        bad("config_invalid", "company", "company is the exact ERPNext company name.")
-    if backend in ("sample", "fake_rest") and not data.get("dataset"):
-        bad("config_invalid", "dataset", "The sample and fake_rest backends need dataset: distributor-v1.")
-    if backend == "frappe_rest" and data.get("dataset"):
-        bad("config_invalid", "dataset", "A live ERPNext has no dataset. Remove it.")
-    url = data.get("site_url")
-    if backend in ("fake_rest", "frappe_rest"):
-        if not isinstance(url, str) or not url:
-            bad("config_invalid", "site_url", "site_url is required for a REST backend.")
-        else:
-            p = urlparse(url)
-            if p.username or p.password or p.query or p.fragment:
-                bad("config_invalid", "site_url", "site_url may not carry credentials, a query or a fragment.")
-            host = p.hostname or ""
-            loopback = host in ("localhost",) or _is_loopback(host)
-            if backend == "fake_rest" and not (p.scheme == "http" and loopback):
-                bad("config_invalid", "site_url", "fake_rest must be a loopback http:// origin.")
-            if backend == "frappe_rest" and p.scheme != "https":
-                bad("config_invalid", "site_url", "A live ERPNext must use https://.")
-            if backend == "frappe_rest" and loopback:
-                bad("config_invalid", "site_url", "A live ERPNext cannot be a loopback address.")
-        if backend == "frappe_rest" and not data.get("credential_ref"):
-            bad("config_invalid", "credential_ref", "credential_ref names the API key secret, for example "
-                "secret:hub/customer-desk/erpnext-reader.")
-    for key, lo, hi in (("timeout_seconds", 1, 60), ("read_attempts", 1, 3), ("page_size", 1, 100)):
-        if key in data and not (isinstance(data[key], int) and not isinstance(data[key], bool) and lo <= data[key] <= hi):
-            bad("config_invalid", key, f"{key} is a whole number from {lo} to {hi}.")
-    wh = data.get("warehouses", [])
-    if not isinstance(wh, list) or not all(isinstance(w, str) for w in wh):
-        bad("config_invalid", "warehouses", "warehouses is a list of ERPNext warehouse names.")
-    return out
+def service(hub_dir: Path) -> ERPService:
+    return ERPService.for_hub(Path(hub_dir))
 
 
-def _is_loopback(host: str) -> bool:
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
+def _read_only(cfg) -> None:
+    if cfg.writes_enabled:
+        raise ERPError("erp_not_read_only", f"{FILE}: writes_enabled must be false. The Customer Desk only reads "
+                       "ERPNext and has no ERP write tool.", status=422, field="writes_enabled")
+    if cfg.submit_credential_ref:
+        raise ERPError("erp_not_read_only", f"{FILE}: the Customer Desk never submits ERP documents. Remove "
+                       "submit_credential_ref.", status=422, field="submit_credential_ref")
 
 
 def load(hub_dir: Path) -> ConnectorConfig:
-    path = Path(hub_dir) / FILE
-    if not path.is_file():
-        raise ERPError("config_invalid", f"{FILE} is missing. Copy the sample from the README.", status=422)
+    """The configuration in force, refused unless it is read only."""
+    applied = service(hub_dir).applied()
+    cfg = applied.config
+    _read_only(cfg)
+    return ConnectorConfig(backend=cfg.backend, dataset=cfg.dataset, site_url=cfg.site_url, company=cfg.company,
+                           currency=cfg.currency, warehouses=tuple(cfg.warehouses),
+                           selling_price_list=cfg.selling_price_list, print_format=cfg.print_format,
+                           synthetic=cfg.synthetic, revision=applied.revision, drift=applied.drift)
+
+
+def problems(text: str) -> list[dict]:
+    """Every problem the file on disk has, each `{code, field, message}`, for doctor."""
     try:
-        data = yaml.safe_load(path.read_text()) or {}
-    except yaml.YAMLError as exc:
-        raise ERPError("config_invalid", f"{FILE} is not valid YAML: {exc}", status=422) from None
-    found = problems(data)
+        cfg = erp_config.parse(text, str(FILE))
+    except ERPError as exc:
+        return [{"code": exc.code, "field": exc.fields.get("field"), "message": exc.message}]
+    try:
+        _read_only(cfg)
+    except ERPError as exc:
+        return [{"code": exc.code, "field": exc.fields.get("field"), "message": exc.message}]
+    return []
+
+
+def apply_file(hub_dir: Path, *, actor: str):
+    """Apply connectors/erpnext.yaml as the next configuration revision. The
+    file must be valid and read only. Until it is applied, the last applied
+    revision stays in force, and doctor reports the drift."""
+    text = (Path(hub_dir) / FILE).read_text()
+    found = problems(text)
     if found:
-        first = found[0]
-        raise ERPError(first["code"], f"{FILE}: {first['message']}", status=422)
-    return ConnectorConfig(
-        backend=data["backend"], dataset=data.get("dataset"), site_url=data.get("site_url"),
-        credential_ref=data.get("credential_ref"), company=data["company"], currency=data.get("currency", "USD"),
-        warehouses=tuple(data.get("warehouses") or ()), selling_price_list=data.get("selling_price_list"),
-        writes_enabled=False, timeout_seconds=data.get("timeout_seconds", 20), read_attempts=data.get("read_attempts", 3),
-        page_size=data.get("page_size", 50), path=str(FILE))
+        raise ERPError(found[0]["code"], found[0]["message"], status=422)
+    svc = service(hub_dir)
+    current = erp_config.current(hub_dir, svc.state_dir)
+    return erp_config.apply(hub_dir, svc.state_dir, erp_config.parse(text), write_file=False,
+                            expected_revision=current.revision if current else "absent", actor=actor)
 
 
-def sample_overlay(hub_dir: Path) -> Path:
-    """Where `desk sample erp-set` keeps the sample ERP edits, in the hub's private data folder."""
-    try:
-        from hubzoid.datadir import state
+def backend(hub_dir: Path, cfg: ConnectorConfig | None = None):
+    """The desk's read client for the configuration in force."""
+    from .adapter import DeskERP
 
-        return state(Path(hub_dir)) / "data" / "sample-erp-overlay.json"
-    except ImportError:  # pragma: no cover
-        return Path(hub_dir) / ".hubzoid" / "data" / "sample-erp-overlay.json"
+    cfg = cfg or load(hub_dir)
+    return DeskERP(service(hub_dir), cfg)
 
 
 def dataset_dir(hub_dir: Path, dataset: str) -> Path:
-    return Path(hub_dir) / "fixtures" / "erp" / dataset
+    return service(hub_dir).datasets_root / dataset
 
 
-def backend(hub_dir: Path, cfg: ConnectorConfig | None = None, *, transport=None):
-    """The read backend the config names."""
-    cfg = cfg or load(hub_dir)
-    if cfg.backend == "sample":
-        from .sample import SampleBackend
+# -- the sample backend's own state ---------------------------------------------------------------
 
-        return SampleBackend(dataset_dir(hub_dir, cfg.dataset), company=cfg.company, overlay=sample_overlay(hub_dir))
-    from .frappe_rest import FrappeRestBackend
+def _sample_transport(hub_dir: Path):
+    cfg = load(hub_dir)
+    if cfg.backend != "sample":
+        raise ERPError("sample_only", "This changes only the sample ERP. The connector is not the sample backend.",
+                       status=409)
+    transport = service(hub_dir).transport()
+    return transport
 
-    token = None
-    if cfg.backend == "fake_rest":
-        from .fake_rest import TOKEN
 
-        token = TOKEN
-    elif cfg.credential_ref:
-        from hubzoid import secretstore
+def sample_edit(hub_dir: Path, resource: str, record_id: str, field: str, value) -> dict:
+    """Stand in for a person changing one field in ERPNext, for a sample demo
+    or a test. The change goes into the sample backend's own state file, the
+    one it keeps drafts in, as a newer copy of the document. The dataset files
+    never change."""
+    transport = _sample_transport(hub_dir)
+    res = RESOURCES[resource]
+    doc = transport.get_doc(res.doctype, record_id)
+    if doc is None:
+        raise not_found(resource, record_id)
+    doc[field] = value
+    doc["modified"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")
+    with closing(transport._db()) as db:
+        db.execute("INSERT OR REPLACE INTO sample_docs (doctype, name, marker, doc_json) VALUES (?,?,NULL,?)",
+                   (res.doctype, record_id, json.dumps(doc, default=str)))
+    return {"resource": resource, "id": record_id, "field": field, "value": value}
 
-        try:
-            token = secretstore.resolve(cfg.credential_ref, hub_dir)
-        except Exception as exc:  # noqa: BLE001 - never echo a value, only the reference
-            raise ERPError("secret_missing", f"The ERPNext credential {cfg.credential_ref} is not available: "
-                           f"{getattr(exc, 'message', type(exc).__name__)}", status=503) from None
-    return FrappeRestBackend(cfg.site_url, company=cfg.company, token=token, backend=cfg.backend,
-                             timeout=cfg.timeout_seconds, attempts=cfg.read_attempts, page_size=cfg.page_size,
-                             transport=transport)
+
+def sample_reset(hub_dir: Path) -> None:
+    """Forget every sample ERP edit (sample backend only)."""
+    _sample_transport(hub_dir).reset_state()
+
+
+def sample_edits(hub_dir: Path) -> int:
+    """How many documents the sample state holds, for the eval's read-only check."""
+    transport = _sample_transport(hub_dir)
+    with closing(transport._db()) as db:
+        return db.execute("SELECT COUNT(*) FROM sample_docs").fetchone()[0]

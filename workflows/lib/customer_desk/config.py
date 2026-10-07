@@ -29,7 +29,7 @@ def settings(hub_dir: Path) -> dict:
     defaults = {"DESK_MODE": "sample", "DESK_CLOCK": "dataset", "DESK_POLICY_FILE": "knowledge/desk-policy.md",
                 "DESK_STYLE_FILE": "knowledge/customer-messages.md", "DESK_KINDS_FILE": "knowledge/request-kinds.md",
                 "DESK_EXTERNAL_CHANNELS": ["sample-email", "sample-whatsapp"], "DESK_INTERNAL_SURFACES": ["chat", "transcript"],
-                "DESK_SLACK_CHANNELS": [], "DESK_INTAKE_ENABLED": True, "DESK_INVOICE_PRINT_FORMAT": "Standard",
+                "DESK_SLACK_CHANNELS": [], "DESK_INTAKE_ENABLED": True,
                 "DESK_MAX_REQUESTS_PER_CASE": 5, "DESK_REOPEN_DAYS": 14, "DESK_RESPONSE_TARGET_HOURS": 8,
                 "DESK_CASE_PREFIX": "CD", "DESK_TICKET_PREFIX": "TKT", "DESK_SECOND_OPINION_BELOW": 0.75,
                 "DESK_HELPDESK": "none", "DESK_HELPDESK_MODE": "dry-run", "DESK_HELPDESK_DRAFTS": False,

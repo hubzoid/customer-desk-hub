@@ -1,10 +1,12 @@
-"""ERPNext reads for the Customer Desk (HUB-108 contract, read parts only).
+"""ERPNext for the Customer Desk: the vendored ERP module behind one read-only adapter.
 
-INTERIM: written here to the HUB-108 contract. When the canonical module from
-the Order & Invoice Desk lands, its read parts are copied in unchanged and
-marked VENDORED with the source commit, replacing these files.
+The module is `workflows/lib/erp`, copied unchanged from the Order & Invoice
+Desk (see erp/VENDORED.md). The desk reaches it only through this package:
+`config.load` refuses a writable configuration, `adapter.DeskERP` reads six
+resources and always for the case's customer, and nothing here can create,
+change or submit an ERP document.
 """
-from .contract import ERPContext, ERPError, RESOURCES
 from .config import backend, load
+from .contract import ERPContext, ERPError, Records
 
-__all__ = ["ERPContext", "ERPError", "RESOURCES", "backend", "load"]
+__all__ = ["ERPContext", "ERPError", "Records", "backend", "load"]

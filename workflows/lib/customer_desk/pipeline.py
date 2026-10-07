@@ -447,7 +447,7 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
         escalations = [f for f in classification["escalation_flags"] if f in loaded.policy.data["escalate_on"]]
         gctx = gather.Context(erp=backend, ctx=ctx, policy=loaded.policy, today=dt.date.fromisoformat(today),
                               sheet=sheet, owners=StoreOwners(hub_dir, c, values),
-                              print_format=values["DESK_INVOICE_PRINT_FORMAT"], customer=customer,
+                              print_format=cfg.print_format, customer=customer,
                               escalations=escalations)
         if customer:
             sheet.erp("customer_name", customer, "customer_name", party=c["customer_id"])

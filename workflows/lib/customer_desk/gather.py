@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from . import ids
 from .erpnext.contract import ERPContext, ERPError
 from .facts import FactSheet, display
 
@@ -70,24 +71,22 @@ class Context:
     today: dt.date
     sheet: FactSheet
     owners: Owners
-    print_format: str = "Standard"
+    print_format: str | None = None       # the connector's print_format, a server setting
     customer: dict | None = None
     escalations: list[str] = field(default_factory=list)
 
 
 def _ids(refs: list[str], kind: str, patterns=None) -> list[str]:
     """Document references as the customer wrote them, cleaned. With the
-    policy's id patterns, the matching part is taken from each reference.
-    `kind` is only a hint for the sample naming series and never filters a
+    policy's id patterns, the matching part is taken from each reference (the
+    longest match, see ids.py). `kind` is only a hint and never filters a
     live reference."""
     out = []
-    compiled = [re.compile(p, re.I) for p in (patterns or [])]
     for r in refs or []:
         text = str(r).strip().strip(".,;:#()[]").upper()
         if not text:
             continue
-        found = [m.group(0).upper() for p in compiled for m in p.finditer(text)]
-        for ref in found or [text]:
+        for ref in ids.find(text, patterns or []) or [text]:
             if ref not in out:
                 out.append(ref)
     return out
@@ -111,6 +110,54 @@ def _read(c: Context, resource: str, rid: str) -> dict | None:
         raise
 
 
+def _order_for(c: Context, ref: str) -> dict | None:
+    """An order by its ERPNext id, or by the customer's own order number
+    (ERPNext's `po_no`). Read whole, with its lines."""
+    rec = _read(c, "sales_orders", ref)
+    if rec is not None:
+        return rec
+    found = c.erp.list_records("sales_orders", {"po_no": ref, "limit": 5}, c.ctx)
+    if not found:
+        return None
+    # Prefer a submitted order when a draft and a submitted one share the number.
+    best = sorted(found, key=lambda r: (r["fields"].get("docstatus") != 1, r["id"]))[0]
+    return _read(c, "sales_orders", best["id"])
+
+
+def _invoices_for_order(c: Context, ref: str) -> list[dict]:
+    """The customer's submitted invoices for an order, by the customer's order
+    number on the invoice, or by the order's lines."""
+    found = c.erp.list_records("sales_invoices", {"po_no": ref, "docstatus": 1, "limit": 10}, c.ctx)
+    if found:
+        return [r for r in (_read(c, "sales_invoices", f["id"]) for f in found) if r]
+    order = _read(c, "sales_orders", ref)
+    if order is None:
+        return []
+    submitted = c.erp.list_records("sales_invoices", {"docstatus": 1, "limit": 200}, c.ctx)
+    out = []
+    for s in submitted:
+        rec = _read(c, "sales_invoices", s["id"])
+        if rec and any(row.get("sales_order") == order["id"] for row in rec["fields"].get("items") or []):
+            out.append(rec)
+    return out
+
+
+def _invoice_from(c: Context, req: dict) -> tuple[dict | None, list[str], str | None]:
+    """The one invoice a request names: (record, candidates, reference). By
+    invoice number first, then by an order it belongs to."""
+    pats = c.policy.data["facts"]["id_patterns"]
+    refs = _ids(req["references"]["invoices"], "SINV", pats)
+    if refs:
+        return _read(c, "sales_invoices", refs[0]), [], refs[0]
+    orders = _ids(req["references"]["orders"], "SO", pats)
+    if not orders:
+        return None, [], None
+    found = _invoices_for_order(c, orders[0])
+    if len(found) == 1:
+        return found[0], [], orders[0]
+    return None, [r["id"] for r in found], orders[0]
+
+
 # -- order status ---------------------------------------------------------------------
 
 def order_facts(c: Context, rec: dict) -> dict:
@@ -119,7 +166,10 @@ def order_facts(c: Context, rec: dict) -> dict:
     per = Decimal(str(f.get("per_delivered") or 0))
     if f.get("status") in ("To Deliver and Bill", "To Deliver") and 0 < per < 100:
         status_text = "confirmed and partly delivered"
-    slots = {"order": s.erp("order", rec, "name", rec["id"], party=f.get("customer")),
+    order = s.erp("order", rec, "name", rec["id"], party=f.get("customer"))
+    # The customer's own order number (ERPNext's po_no) is what they know the order by.
+    ref = s.erp("customer_ref", rec, "po_no", party=f.get("customer")) if f.get("po_no") else order
+    slots = {"order": order, "order_ref": ref,
              "order_status": s.erp("order_status", rec, "status", party=f.get("customer"), display_text=status_text),
              "delivery_date": s.erp("delivery_date", rec, "delivery_date", party=f.get("customer")),
              "per_delivered": s.erp("per_delivered", rec, "per_delivered", party=f.get("customer"))}
@@ -137,24 +187,40 @@ def order_facts(c: Context, rec: dict) -> dict:
 
 def order_status(c: Context, n: int, req: dict) -> Outcome:
     pol = c.policy.category("order_status")
-    out = Outcome(n, "order_status", "answer", ["answer", "not_found", "overdue_ticket", "no_open_orders", "clarify"],
-                  ["R3", "R4"])
+    out = Outcome(n, "order_status", "answer", ["answer", "not_found", "overdue_ticket", "no_open_orders", "clarify",
+                                                "not_confirmed", "cancelled"], ["R3", "R4"])
     refs = _ids(req["references"]["orders"], "SO", c.policy.data["facts"]["id_patterns"])
-    recs, missing = [], []
+    recs, missing, drafts, cancelled = [], [], [], []
     if refs:
         for rid in refs[: pol["max_orders"]]:
-            rec = _read(c, "sales_orders", rid)
-            if rec is None or rec["fields"]["docstatus"] != 1:
+            rec = _order_for(c, rid)
+            if rec is None:
                 missing.append(rid)
+            elif rec["fields"]["docstatus"] == 0:
+                drafts.append((rid, rec))
+            elif rec["fields"]["docstatus"] == 2:
+                cancelled.append((rid, rec))
             else:
                 recs.append(rec)
     else:
         found = c.erp.list_records("sales_orders", {"open_only": True, "limit": 50}, c.ctx)
         found.sort(key=lambda r: (r["fields"].get("transaction_date") or "", r["id"]), reverse=True)
-        recs = found[: pol["max_orders"]]
+        recs = [r for r in (_read(c, "sales_orders", f["id"]) for f in found[: pol["max_orders"]]) if r]
     for rid in missing:
         out.slots.setdefault("not_found", []).append(c.sheet.message("reference", rid, field="order reference"))
+    for rid, rec in drafts:
+        out.notes.append(f"Order {rid} is a draft in ERPNext ({rec['id']}). Confirm it before telling the customer "
+                         "a date.")
+    for rid, rec in cancelled:
+        out.notes.append(f"Order {rid} ({rec['id']}) is cancelled in ERPNext. Check why before the reply goes.")
     if not recs:
+        if drafts or cancelled:
+            rid, rec = (drafts or cancelled)[0]
+            out.outcome = "not_confirmed" if drafts else "cancelled"
+            out.rule_refs = ["R3", "R19"]
+            out.slots["reference"] = c.sheet.message("reference", rid, field="order reference")
+            out.queue = "operators"
+            return out
         out.outcome = "not_found" if missing else "no_open_orders"
         out.rule_refs = ["R1", "R4"] if missing else ["R4"]
         return out
@@ -192,14 +258,18 @@ def order_status(c: Context, n: int, req: dict) -> Outcome:
 def invoice_copy(c: Context, n: int, req: dict) -> Outcome:
     pol = c.policy.category("invoice_copy")
     out = Outcome(n, "invoice_copy", "send_copy", ["send_copy", "not_found", "too_old", "clarify"], ["R3", "R6"])
-    refs = _ids(req["references"]["invoices"], "SINV", c.policy.data["facts"]["id_patterns"])
-    if len(refs) != 1:
+    rec, candidates, rid = _invoice_from(c, req)
+    if rid is None or len(_ids(req["references"]["invoices"], "SINV", c.policy.data["facts"]["id_patterns"])) > 1:
         out.outcome = "clarify"
         out.rule_refs = ["R17"]
         out.questions.append("Which invoice number would you like a copy of?")
         return out
-    rid = refs[0]
-    rec = _read(c, "sales_invoices", rid)
+    if candidates:
+        out.outcome = "clarify"
+        out.rule_refs = ["R6", "R17"]
+        out.notes.append(f"Order {rid} has more than one invoice: {', '.join(candidates)}.")
+        out.questions.append("That order has more than one invoice. Which invoice number would you like?")
+        return out
     if rec is None or rec["fields"]["docstatus"] != 1:
         out.outcome = "not_found"
         out.rule_refs = ["R7"]
@@ -221,7 +291,7 @@ def invoice_copy(c: Context, n: int, req: dict) -> Outcome:
         return out
     data = c.erp.get_print_pdf("sales_invoices", rec["id"], c.print_format, c.ctx)
     att = c.owners.attachment(name=f"{rec['id']}.pdf", media_type="application/pdf", data=data)
-    att["source"] = {"doctype": "Sales Invoice", "name": rec["id"], "print_format": c.print_format,
+    att["source"] = {"doctype": "Sales Invoice", "name": rec["id"], "print_format": c.print_format or "Standard",
                      "backend": rec["backend"]}
     out.attachments.append(att)
     return out
@@ -323,8 +393,7 @@ def _stem(word: str) -> str:
 
 def _find_items(c: Context, text: str) -> list[dict]:
     text = (text or "").strip()
-    codes = [m.group(0).upper() for p in c.policy.data["facts"]["id_patterns"]
-             for m in re.finditer(p, text, re.I)]
+    codes = ids.find(text, c.policy.data["facts"]["id_patterns"])
     for code in codes:
         rec = _read(c, "items", code)
         if rec:
@@ -414,7 +483,11 @@ def price_availability(c: Context, n: int, req: dict) -> Outcome:
                    "name": ",".join(b["id"] for b in bins) or item["id"], "field": "projected_qty",
                    "observed_at": bins[0]["observed_at"] if bins else c.sheet.observed_at}
             entry["availability_kind"] = disclosure
-            if disclosure == "exact":
+            if disclosure == "exact" and total <= 0:
+                # Nothing to count: say out of stock rather than "0 available".
+                entry["availability_kind"] = "band"
+                entry["availability"] = c.sheet.add("availability_band", "out of stock", source=dict(src, banded=True))
+            elif disclosure == "exact":
                 entry["availability"] = c.sheet.add("availability_qty", str(total), source=src)
             else:
                 limit = Decimal(pol["availability"]["limited_below"])
@@ -453,7 +526,7 @@ def delivery_change(c: Context, n: int, req: dict) -> Outcome:
         out.rule_refs = ["R17"]
         out.questions.append("Which order should we move, and to which date?")
         return out
-    rec = _read(c, "sales_orders", refs[0])
+    rec = _order_for(c, refs[0])
     if rec is None or rec["fields"]["docstatus"] != 1:
         out.outcome = "not_found"
         out.rule_refs = ["R1", "R12"]
@@ -462,6 +535,8 @@ def delivery_change(c: Context, n: int, req: dict) -> Outcome:
     f = rec["fields"]
     party = f.get("customer")
     out.slots["order"] = c.sheet.erp("order", rec, "name", rec["id"], party=party)
+    out.slots["order_ref"] = (c.sheet.erp("customer_ref", rec, "po_no", party=party) if f.get("po_no")
+                              else out.slots["order"])
     out.slots["delivery_date"] = c.sheet.erp("delivery_date", rec, "delivery_date", party=party)
     if Decimal(str(f.get("per_delivered") or 0)) >= 100:
         out.outcome = "already_delivered"
@@ -515,14 +590,13 @@ def complaint(c: Context, n: int, req: dict, *, severity_floor: str = "normal") 
     if not req.get("refund_requested"):
         return out
     refunds = c.policy.data["refunds"]
-    refs = _ids(req["references"]["invoices"], "SINV", c.policy.data["facts"]["id_patterns"])
-    inv = _read(c, "sales_invoices", refs[0]) if refs else None
+    inv, _candidates, ref = _invoice_from(c, req)
     if inv is None or inv["fields"]["docstatus"] != 1:
         out.outcome = "refund_decision"
         out.rule_refs = ["R14", "R15"]
-        out.notes.append("Refund requested without an invoice under this account. The exception team decides.")
+        out.notes.append("Refund requested without one invoice under this account. The exception team decides.")
         d = c.owners.decision(key=f"refund:{n}", kind="refund_exception",
-                              inputs={"invoice": refs[0] if refs else None, "days_elapsed": None,
+                              inputs={"invoice": None, "reference": ref, "days_elapsed": None,
                                       "within_days": refunds["within_days"], "amount_text": req.get("amount_text"),
                                       "reason": "no_invoice"})
         out.slots["decision"] = d["id"]
@@ -535,17 +609,22 @@ def complaint(c: Context, n: int, req: dict, *, severity_floor: str = "normal") 
     elapsed = (c.today - _d(f["posting_date"])).days
     out.slots["within_days"] = c.sheet.policy("refunds.within_days", refunds["within_days"], kind="policy_days",
                                               display_text=display("days", refunds["within_days"]))
-    if elapsed <= refunds["within_days"]:
+    cap = refunds.get("max_amount")
+    over = cap is not None and Decimal(str(f.get("grand_total") or 0)) > Decimal(str(cap))
+    if elapsed <= refunds["within_days"] and not over:
         out.outcome = "refund_to_accounts"
         out.rule_refs = ["R14", "R15"]
         out.notes.append(f"Refund within policy ({elapsed} days after the invoice). Accounts confirm.")
     else:
         out.outcome = "refund_decision"
         out.rule_refs = ["R14", "R15"]
+        reason = "above_max_amount" if over and elapsed <= refunds["within_days"] else "outside_window"
+        out.notes.append("Refund " + ("above the policy amount" if reason == "above_max_amount" else
+                                      f"outside the {refunds['within_days']} day window") + ". The exception team decides.")
         d = c.owners.decision(key=f"refund:{inv['id']}", kind="refund_exception",
                               inputs={"invoice": inv["id"], "invoice_fact_id": out.slots["invoice"],
                                       "days_elapsed": elapsed, "within_days": refunds["within_days"],
-                                      "amount_text": req.get("amount_text")})
+                                      "max_amount": cap, "reason": reason, "amount_text": req.get("amount_text")})
         out.slots["decision"] = d["id"]
         out.queue = "decisions"
         _decided(c, out, d)

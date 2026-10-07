@@ -13,7 +13,8 @@ import re
 
 MONTHS = {m: i for i, m in enumerate(["january", "february", "march", "april", "may", "june", "july", "august",
                                       "september", "october", "november", "december"], start=1)}
-ID = r"SYN-[A-Z]+-[0-9]+"
+#: The sample policy's id patterns (knowledge/desk-policy.md), so references are read the same way.
+PATTERNS = [r"SAL-ORD-[0-9]{4}-[0-9]{5}", r"ACC-SINV-[0-9]{4}-[0-9]{5}", r"SYN-[A-Z]+-[0-9]+", r"\b[A-Z]{2,4}-[0-9]{3,5}\b"]
 
 
 def _message(text: str) -> str:
@@ -38,27 +39,30 @@ def _dates(body: str, today: dt.date) -> list[str]:
 
 
 CATS = [
-    ("complaint", r"damaged|broken|complain|wrong item|charged twice|refund|money back|unhappy|lawyer|legal action"),
+    ("complaint", r"damaged|broken|complain|wrong item|charged twice|refund|money back|unhappy|lawyer|legal action|"
+                  r"leak|\blate\b|ran out"),
     ("delivery_change", r"move (the )?deliver|reschedul|deliver(y)? .*(later|earlier|instead)|change the delivery|"
-                        r"push (the )?delivery|bring .* forward|new delivery date"),
-    ("account_statement", r"statement|open invoices|everything we (still )?owe|unpaid invoices|what we owe"),
+                        r"push (the )?delivery|bring .* forward|new delivery date|come on .* instead"),
+    ("account_statement", r"statement|open invoices|everything we (still )?owe|unpaid invoices|what (do )?we owe|"
+                          r"still open"),
     ("invoice_copy", r"copy of (the )?invoice|invoice copy|resend .*invoice|pdf of|send .*invoice"),
-    ("price_availability", r"price|in stock|availability|how much|do you have|stock"),
-    ("order_status", r"where is|status|has .* shipped|when will|arrive|track|update on (my|our) order|check .*order|"
-                     r"news on (my|our) order|i mean order"),
+    ("price_availability", r"price|in stock|availability|how much|do you have|stock|\bcost"),
+    ("order_status", r"where is|status|has (.* )?shipped|when will|arrive|track|update on (my|our) order|check .*order|"
+                     r"news on (my |our )?order|i mean order|what happened to"),
 ]
 FLAGS = [("legal_threat", r"lawyer|legal action|court|sue\b"), ("safety_issue", r"injur|unsafe|hurt"),
          ("personal_data_request", r"delete (my|our) (personal )?data|personal data"),
-         ("other_customer_data", r"another customer|other customer|their invoices|someone else's")]
+         ("other_customer_data", r"another customer|other customer|their invoices|someone else's|every customer")]
 
 
 INJECTION = re.compile(r"ignore (?:(?:all|your|previous|my) )+(?:instructions|rules)|you are now|"
                        r"approve (?:this|the) refund|mark every refund|system prompt|system notice|reveal|"
-                       r"as the administrator|administrator mode", re.I)
+                       r"as the administrator|administrator mode|^\s*system:|you are approved", re.I | re.M)
 
 
 def classify(message: str) -> dict:
     body = _message(message)
+    original = body.lower()
     today = _today(message)
     injection = bool(INJECTION.search(body))
     # Instructions to the desk are not requests: drop those sentences, as the real classifier is told to.
@@ -87,16 +91,21 @@ def classify(message: str) -> dict:
     requests.sort(key=first_hit)
     if not requests:
         requests.append(_request("other", body, today))
-    flags = [f for f, pat in FLAGS if re.search(pat, low)]
+    # Risk flags only add: read on the whole message, injected instructions included.
+    flags = [f for f, pat in FLAGS if re.search(pat, original)]
     return {"language": "en", "summary": "A customer request.", "escalation_flags": flags,
             "needs_clarification": False, "questions": [], "confidence": 0.9 if requests[0]["category"] != "other" else 0.5,
             "injection_detected": injection, "requests": requests[:5]}
 
 
 def _request(cat: str, text: str, today: dt.date) -> dict:
-    orders = re.findall(r"SYN-SO-\d+", text)
-    invoices = re.findall(r"SYN-SINV-\d+", text)
-    items = [{"text": code, "quantity": None} for code in re.findall(r"SYN-ITEM-\d+", text)]
+    from .ids import find
+
+    found = find(text, PATTERNS)
+    invoices = [i for i in found if i.startswith("ACC-SINV-")]
+    items = [{"text": i, "quantity": None} for i in found if i.startswith("SYN-ITEM-")]
+    # Orders by ERPNext id or by the customer's own order number.
+    orders = [i for i in found if i.startswith("SAL-ORD-") or not i.startswith(("ACC-SINV-", "SYN-"))]
     if cat == "price_availability" and not items:
         m = re.search(r"(?:price for|price of|cost of|much are|much is|do you have|have any) (?:the |your |any |our )?"
                       r"([a-z][a-z ,-]{2,40}?)(?: for us| in stock|,|\?|\.| and|$)", text.lower())
