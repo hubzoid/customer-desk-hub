@@ -144,18 +144,23 @@ def _invoices_for_order(c: Context, ref: str) -> list[dict]:
 
 def _invoice_from(c: Context, req: dict) -> tuple[dict | None, list[str], str | None]:
     """The one invoice a request names: (record, candidates, reference). By
-    invoice number first, then by an order it belongs to."""
+    invoice number first, then as the customer's order number or an order the
+    invoice belongs to. A customer often names an invoice by their own order
+    number ("the invoice for PC-0031"), so a reference is tried both ways,
+    whichever list the classifier put it in."""
     pats = c.policy.data["facts"]["id_patterns"]
     refs = _ids(req["references"]["invoices"], "SINV", pats)
-    if refs:
-        return _read(c, "sales_invoices", refs[0]), [], refs[0]
-    orders = _ids(req["references"]["orders"], "SO", pats)
-    if not orders:
+    refs += [r for r in _ids(req["references"]["orders"], "SO", pats) if r not in refs]
+    if not refs:
         return None, [], None
-    found = _invoices_for_order(c, orders[0])
+    ref = refs[0]
+    rec = _read(c, "sales_invoices", ref)
+    if rec is not None:
+        return rec, [], ref
+    found = _invoices_for_order(c, ref)
     if len(found) == 1:
-        return found[0], [], orders[0]
-    return None, [r["id"] for r in found], orders[0]
+        return found[0], [], ref
+    return None, [r["id"] for r in found], ref
 
 
 # -- order status ---------------------------------------------------------------------

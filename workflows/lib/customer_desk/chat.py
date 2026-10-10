@@ -295,6 +295,11 @@ def policy_summary(hub_dir: Path) -> str:
     pol = policy_lib.load(hub_dir, values["DESK_POLICY_FILE"])
     rules = "\n".join(f"- [{k}] {v}" for k, v in pol.rules.items())
     gaps = "\n".join(f"- {g['message']} Default: {g['default']}" for g in policy_lib.gaps(pol)) or "None."
+    import yaml
+
+    # The settings block is what the code enforces, so a correction is checked against it, not the rule text.
+    settings = yaml.safe_dump(pol.data, sort_keys=False, default_flow_style=None, width=100).strip()
     return _json({"kind": "report", "title": "Desk policy", "sections": [
+        {"heading": "Settings in force (enforced in code)", "markdown": f"```yaml\n{settings}\n```"},
         {"heading": f"{pol.path} {pol.digest[:19]}", "markdown": rules},
         {"heading": "Settings left to defaults", "markdown": gaps}], "sources": [{"label": pol.path}]})

@@ -35,7 +35,12 @@ STATE_TEXT = {
 }
 
 
-def _age_hours(case: dict) -> float | None:
+def _age_hours(case: dict, *, dataset_clock: bool = False) -> float | None:
+    """Hours since the customer's first message. On the sample dataset's fixed
+    clock the message's own time is in the dataset's past, so the age counts
+    from when the case reached the desk, as the metrics do."""
+    if dataset_clock:
+        return max(0.0, (dt.datetime.now(dt.timezone.utc).timestamp() - case["created"]) / 3600)
     try:
         first = dt.datetime.fromisoformat((case["first_received_at"] or "").replace("Z", "+00:00"))
     except ValueError:
@@ -81,7 +86,7 @@ def queue(hub_dir: Path, *, tab: str = "all", viewer: str | None = None, limit: 
     out = []
     for c in rows:
         reply = store.get_reply(conn, c["id"], c["current_reply"]) if c["current_reply"] else None
-        age = _age_hours(c)
+        age = _age_hours(c, dataset_clock=values.get("DESK_CLOCK") == "dataset")
         out.append({"case": c["number"], "customer": c["customer_id"] or "unbound", "channel": c["channel_id"] or c["surface"],
                     "categories": ", ".join(_categories(conn, c)), "state": c["state"], "queue": c["queue"] or "",
                     "assignee": c["claimed_by"] or "", "first_line": (reply["rendered"].split("\n\n")[1][:90]
