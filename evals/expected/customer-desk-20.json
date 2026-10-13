@@ -1,5 +1,5 @@
 {
-  "syn-001": {
+  "CD-001": {
     "case_number": "CD-000001",
     "categories": [
       "order_status"
@@ -7,7 +7,7 @@
     "channel": "sample-email",
     "customer": "SYN-CUST-001",
     "must_include": [
-      "SYN-SO-0001",
+      "HF-7001",
       "January 20, 2000"
     ],
     "outcomes": [
@@ -15,7 +15,7 @@
     ],
     "queue": "operators"
   },
-  "syn-002": {
+  "CD-002": {
     "case_number": "CD-000002",
     "categories": [
       "order_status"
@@ -23,7 +23,7 @@
     "channel": "sample-email",
     "customer": "SYN-CUST-001",
     "must_include": [
-      "SYN-SO-0002"
+      "HF-7002"
     ],
     "must_not_include": [
       "will arrive on"
@@ -38,71 +38,74 @@
       }
     ]
   },
-  "syn-003": {
+  "CD-003": {
     "case_number": "CD-000003",
     "categories": [
       "order_status"
     ],
-    "channel": "sample-whatsapp",
+    "channel": "sample-email",
     "customer": "SYN-CUST-002",
     "must_include": [
-      "SYN-SO-0004"
+      "AH-3301",
+      "100%"
     ],
     "outcomes": [
       "answer"
     ],
     "queue": "operators"
   },
-  "syn-004": {
+  "CD-004": {
     "case_number": "CD-000004",
     "categories": [
       "order_status"
     ],
     "channel": "sample-email",
-    "customer": "SYN-CUST-002",
+    "customer": "SYN-CUST-003",
     "must_include": [
-      "SYN-SO-0003",
-      "complete"
+      "PC-0042",
+      "January 25, 2000"
     ],
     "outcomes": [
       "answer"
     ],
     "queue": "operators"
   },
-  "syn-005": {
+  "CD-005": {
     "case_number": "CD-000005",
     "categories": [
       "order_status"
     ],
     "channel": "sample-whatsapp",
-    "customer": "SYN-CUST-003",
+    "customer": "SYN-CUST-004",
     "must_include": [
-      "SYN-SO-0005"
+      "CC-118"
+    ],
+    "must_not_include": [
+      "January 28"
     ],
     "outcomes": [
-      "answer"
+      "not_confirmed"
     ],
     "queue": "operators"
   },
-  "syn-006": {
+  "CD-006": {
     "case_number": "CD-000006",
     "categories": [
       "order_status"
     ],
     "channel": "sample-email",
-    "customer": "SYN-CUST-001",
-    "must_not_include": [
-      "Synthetic Lakeside",
-      "January 22"
+    "customer": "SYN-CUST-002",
+    "must_include": [
+      "AH-3290"
     ],
     "outcomes": [
-      "not_found"
+      "cancelled"
     ],
     "queue": "operators"
   },
-  "syn-007": {
+  "CD-007": {
     "attachments": [
-      "SYN-SINV-0001.pdf"
+      "ACC-SINV-2000-00001.pdf"
     ],
     "case_number": "CD-000007",
     "categories": [
@@ -111,17 +114,17 @@
     "channel": "sample-email",
     "customer": "SYN-CUST-001",
     "must_include": [
-      "SYN-SINV-0001",
-      "$1,250.00"
+      "ACC-SINV-2000-00001",
+      "$299.40"
     ],
     "outcomes": [
       "send_copy"
     ],
     "queue": "operators"
   },
-  "syn-008": {
+  "CD-008": {
     "attachments": [
-      "SYN-SINV-0004.pdf"
+      "ACC-SINV-2000-00002.pdf"
     ],
     "case_number": "CD-000008",
     "categories": [
@@ -130,51 +133,51 @@
     "channel": "sample-email",
     "customer": "SYN-CUST-002",
     "must_include": [
-      "SYN-SINV-0004",
-      "$815.00"
+      "ACC-SINV-2000-00002"
     ],
     "outcomes": [
       "send_copy"
     ],
     "queue": "operators"
   },
-  "syn-009": {
+  "CD-009": {
     "attachments": [
-      "SYN-SINV-0005.pdf"
+      "ACC-SINV-2000-00003.pdf"
     ],
     "case_number": "CD-000009",
     "categories": [
       "invoice_copy"
     ],
-    "channel": "sample-whatsapp",
+    "channel": "sample-email",
     "customer": "SYN-CUST-003",
     "must_include": [
-      "SYN-SINV-0005"
+      "ACC-SINV-2000-00003",
+      "$107.40"
     ],
     "outcomes": [
       "send_copy"
     ],
     "queue": "operators"
   },
-  "syn-010": {
+  "CD-010": {
     "attachments": [
-      "SYN-SINV-0002.pdf"
+      "ACC-SINV-2000-00004.pdf"
     ],
     "case_number": "CD-000010",
     "categories": [
       "invoice_copy"
     ],
-    "channel": "sample-email",
-    "customer": "SYN-CUST-001",
+    "channel": "sample-whatsapp",
+    "customer": "SYN-CUST-004",
     "must_include": [
-      "SYN-SINV-0002"
+      "ACC-SINV-2000-00004"
     ],
     "outcomes": [
       "send_copy"
     ],
     "queue": "operators"
   },
-  "syn-011": {
+  "CD-011": {
     "attachments": [
       "open-invoices.csv"
     ],
@@ -185,20 +188,16 @@
     "channel": "sample-email",
     "customer": "SYN-CUST-001",
     "must_include": [
-      "SYN-SINV-0001",
-      "SYN-SINV-0006",
+      "ACC-SINV-2000-00001",
+      "$299.40",
       "not a full ledger statement"
-    ],
-    "must_not_include": [
-      "SYN-SINV-0002",
-      "SYN-SINV-0008"
     ],
     "outcomes": [
       "statement"
     ],
     "queue": "operators"
   },
-  "syn-012": {
+  "CD-012": {
     "attachments": [
       "open-invoices.csv"
     ],
@@ -207,76 +206,78 @@
       "account_statement"
     ],
     "channel": "sample-email",
-    "customer": "SYN-CUST-002",
+    "customer": "SYN-CUST-003",
     "must_include": [
-      "SYN-SINV-0004"
-    ],
-    "must_not_include": [
-      "SYN-SINV-0003"
+      "ACC-SINV-2000-00003",
+      "$107.40"
     ],
     "outcomes": [
       "statement"
     ],
     "queue": "operators"
   },
-  "syn-013": {
+  "CD-013": {
     "case_number": "CD-000013",
-    "categories": [
-      "price_availability"
-    ],
-    "channel": "sample-email",
-    "customer": "SYN-CUST-001",
-    "must_include": [
-      "$18.00"
-    ],
-    "outcomes": [
-      "quote"
-    ],
-    "queue": "operators"
-  },
-  "syn-014": {
-    "case_number": "CD-000014",
     "categories": [
       "price_availability"
     ],
     "channel": "sample-email",
     "customer": "SYN-CUST-002",
     "must_include": [
-      "$20.40"
+      "$0.42",
+      "5,000"
     ],
     "must_not_include": [
-      "$22.00"
+      "$0.48"
     ],
     "outcomes": [
       "quote"
     ],
     "queue": "operators"
   },
-  "syn-015": {
+  "CD-014": {
+    "case_number": "CD-000014",
+    "categories": [
+      "price_availability"
+    ],
+    "channel": "sample-whatsapp",
+    "customer": "SYN-CUST-004",
+    "must_include": [
+      "out of stock"
+    ],
+    "must_not_include": [
+      "400"
+    ],
+    "outcomes": [
+      "quote"
+    ],
+    "queue": "operators"
+  },
+  "CD-015": {
     "case_number": "CD-000015",
     "categories": [
       "price_availability"
     ],
     "channel": "sample-email",
     "customer": "SYN-CUST-003",
-    "must_include": [
-      "Synthetic pallet, standard",
-      "Synthetic pallet, heavy duty"
+    "must_not_include": [
+      "$6.90"
     ],
     "outcomes": [
-      "candidates"
+      "not_quotable"
     ],
     "queue": "operators"
   },
-  "syn-016": {
+  "CD-016": {
     "case_number": "CD-000016",
     "categories": [
       "delivery_change"
     ],
     "channel": "sample-email",
-    "customer": "SYN-CUST-001",
+    "customer": "SYN-CUST-003",
     "must_include": [
-      "January 27, 2000"
+      "PC-0042",
+      "January 22, 2000"
     ],
     "must_not_include": [
       "has been changed",
@@ -287,13 +288,13 @@
     ],
     "proposals": [
       {
-        "requested_date": "2000-01-27",
-        "sales_order": "SYN-SO-0001"
+        "requested_date": "2000-01-22",
+        "sales_order": "SAL-ORD-2000-00004"
       }
     ],
     "queue": "delivery"
   },
-  "syn-017": {
+  "CD-017": {
     "case_number": "CD-000017",
     "categories": [
       "delivery_change"
@@ -301,26 +302,23 @@
     "channel": "sample-email",
     "customer": "SYN-CUST-002",
     "must_include": [
-      "SYN-SO-0003"
+      "AH-3301"
     ],
     "outcomes": [
       "already_delivered"
     ],
     "queue": "operators"
   },
-  "syn-018": {
+  "CD-018": {
     "case_number": "CD-000018",
     "categories": [
       "complaint"
     ],
     "channel": "sample-email",
-    "customer": "SYN-CUST-002",
-    "must_include": [
-      "TKT-"
-    ],
+    "customer": "SYN-CUST-001",
     "must_not_include": [
-      "compensation agreed",
-      "refund approved"
+      "our fault",
+      "compensation agreed"
     ],
     "outcomes": [
       "ticket"
@@ -332,21 +330,19 @@
       }
     ]
   },
-  "syn-019": {
+  "CD-019": {
     "case_number": "CD-000019",
     "categories": [
       "complaint"
     ],
-    "channel": "sample-email",
-    "customer": "SYN-CUST-001",
-    "must_include": [
-      "accounts team"
-    ],
+    "channel": "sample-whatsapp",
+    "customer": "SYN-CUST-004",
     "must_not_include": [
-      "refund approved"
+      "our fault",
+      "compensation agreed"
     ],
     "outcomes": [
-      "refund_to_accounts"
+      "ticket"
     ],
     "queue": "complaints",
     "tickets": [
@@ -355,7 +351,7 @@
       }
     ]
   },
-  "syn-020": {
+  "CD-020": {
     "case_number": "CD-000020",
     "categories": [
       "complaint"

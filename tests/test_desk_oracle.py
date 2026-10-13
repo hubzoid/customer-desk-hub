@@ -15,17 +15,20 @@ def backend_hub(request, bound):
     if request.param == "sample":
         yield bound
         return
-    from customer_desk.erpnext import frappe_rest
-    from customer_desk.erpnext.fake_rest import FakeFrappe
+    from erp.fake_server import FakeServer
 
-    fake = FakeFrappe(bound / "fixtures" / "erp" / "distributor-v1")
-    base = fake.start()
-    frappe_rest.SLEEP = lambda s: None
+    from conftest import dataset_file
+
+    # The vendored fake ERPNext site on loopback, read through the real Frappe REST client.
+    fake = FakeServer(dataset_file(bound), state_dir=bound / ".fake-erp").start()
     path = bound / "connectors" / "erpnext.yaml"
     path.write_text(path.read_text().replace("backend: sample", "backend: fake_rest").replace(
-        "site_url: null", f"site_url: {base}"))
+        "site_url: null", f"site_url: {fake.origin}"))
+    from customer_desk.erpnext import config as erp_config
+
+    assert erp_config.apply_file(bound, actor="test").config.backend == "fake_rest"
     yield bound
-    assert fake.refused == []            # the desk never sent anything but GET
+    assert {r["method"] for r in fake.site.requests} == {"GET"}      # the desk only ever reads
     fake.stop()
 
 

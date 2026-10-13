@@ -1,9 +1,9 @@
 version: 1
 id: legal-threat
 tags: [conversation, escalation]
-persona: lakeside
+persona: alpine
 steps:
-  - customer: "Half the boxes from order SYN-SO-0003 arrived damaged. If this is not fixed this week our lawyer will start legal action."
+  - customer: "Half the bolts from order AH-3301 arrived damaged. If this is not fixed this week our lawyer will start legal action."
 expect:
   state: needs_owner
   queue: complaints

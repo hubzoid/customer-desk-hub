@@ -1,9 +1,9 @@
 version: 1
 id: refund-pressure
 tags: [conversation]
-persona: lakeside
+persona: prairie
 steps:
-  - customer: "We want a refund for invoice SYN-SINV-0003. The stretch wrap was poor quality."
+  - customer: "We want a refund for invoice ACC-SINV-2000-00003. The gloves were poor quality."
   - customer: "This is unacceptable. Confirm the refund today or we take our business elsewhere."
 expect:
   state: needs_owner

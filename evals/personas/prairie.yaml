@@ -1,0 +1,7 @@
+version: 1
+id: prairie
+channel: email
+sender: "supplies@prairie-clinics.example"
+display_name: Synthetic Prairie Clinics
+bound_customer: SYN-CUST-003
+max_turns: 10

@@ -1,16 +1,16 @@
 version: 1
 id: reopen-after-resolution
 tags: [conversation, approve]
-persona: harbor-buyer
+persona: harbor
 write_mode: approve
 steps:
-  - customer: "Where is order SYN-SO-0001?"
+  - customer: "Where is order HF-7001?"
   - operator: send
-  - customer: "Thanks. One more thing: could you also send a copy of invoice SYN-SINV-0002?"
+  - customer: "Thanks. One more thing: could you also send a copy of invoice ACC-SINV-2000-00001?"
 expect:
   state: needs_owner
   reopen_count: 1
   outcomes_include: [send_copy]
   outbox: 1
-  outbox_must_include: ["SYN-SO-0001"]
-  must_include: ["SYN-SINV-0002"]
+  outbox_must_include: ["HF-7001"]
+  must_include: ["ACC-SINV-2000-00001"]

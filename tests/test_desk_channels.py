@@ -20,7 +20,7 @@ from engine import OWNER, Engine, wait_case, wait_item, waiting_op
 pytestmark = pytest.mark.engine
 
 MAILBOX = "care@synthetic-meridian.example"
-BOUND = "accounts@synthetic-harbor.example"
+BOUND = "purchasing@harbor-foods.example"
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 PRIV = KEY.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL,
                          serialization.NoEncryption())
@@ -29,14 +29,14 @@ PUB = base64.b64encode(KEY.public_key().public_bytes(serialization.Encoding.DER,
 
 
 def dns(name, timeout=5):
-    if name in (b"sel._domainkey.synthetic-harbor.example.",):
+    if name in (b"sel._domainkey.harbor-foods.example.",):
         return f"v=DKIM1; k=rsa; p={PUB}".encode()
     return b""
 
 
 def message(sender, subject, body, msgid):
     m = EmailMessage()
-    m["From"] = f"Synthetic Harbor Accounts <{sender}>"
+    m["From"] = f"Synthetic Harbor Foods <{sender}>"
     m["To"] = MAILBOX
     m["Subject"] = subject
     m["Message-ID"] = msgid
@@ -44,7 +44,7 @@ def message(sender, subject, body, msgid):
     m.set_content(body)
     raw = bytes(m)
     domain = sender.rpartition("@")[2].encode()
-    if domain == b"synthetic-harbor.example":
+    if domain == b"harbor-foods.example":
         raw = dkim.sign(raw, b"sel", domain, PRIV, include_headers=[b"from", b"subject", b"to", b"date"]) + raw
     return raw
 
@@ -96,7 +96,7 @@ def test_bound_sender_becomes_a_case_and_the_approved_reply_goes_back_on_the_thr
     engine = Engine(hub, tmp_path)
     try:
         poller.process(conn, {"id": "1", "raw": message(BOUND, "Invoice copy", "Please send a copy of invoice "
-                                                      "SYN-SINV-0002.", "<inv-1@synthetic-harbor.example>")})
+                                                      "ACC-SINV-2000-00001.", "<inv-1@harbor-foods.example>")})
         route(hub)
         [item] = intake.list_items(hub)["items"]
         assert item["state"] == "dispatched"
@@ -128,8 +128,8 @@ def test_bound_sender_becomes_a_case_and_the_approved_reply_goes_back_on_the_thr
         wait_item(hub, out["work_item_id"], ("completed",))
         sent = [json.loads(p.read_text()) for p in sorted(mail.glob("sent-*.json"))]
         assert len(sent) == 1 and sent[0]["to"] == [BOUND]
-        assert "In-Reply-To: <inv-1@synthetic-harbor.example>" in sent[0]["raw"]
-        assert "SYN-SINV-0002" in sent[0]["raw"]
+        assert "In-Reply-To: <inv-1@harbor-foods.example>" in sent[0]["raw"]
+        assert "ACC-SINV-2000-00001" in sent[0]["raw"]
         assert edited["typed_by_person"] == []
     finally:
         engine.close()
@@ -145,7 +145,7 @@ def test_unknown_sender_waits_in_intake_until_a_person_releases_it(channel, tmp_
     engine = Engine(hub, tmp_path)
     try:
         poller.process(conn, {"id": "2", "raw": message("stranger@synthetic-other.example", "Order",
-                                                      "Where is order SYN-SO-0001?", "<s-1@synthetic-other.example>")})
+                                                      "Where is order HF-7001?", "<s-1@synthetic-other.example>")})
         route(hub)
         [item] = intake.list_items(hub)["items"]
         assert item["state"] == "quarantined" and not item.get("work_item_id")
@@ -182,8 +182,8 @@ def test_a_policy_change_after_approval_stops_the_email_reply(channel, tmp_path)
     hub, conn, mail = channel
     engine = Engine(hub, tmp_path)
     try:
-        poller.process(conn, {"id": "3", "raw": message(BOUND, "Order", "Where is order SYN-SO-0001?",
-                                                      "<so-1@synthetic-harbor.example>")})
+        poller.process(conn, {"id": "3", "raw": message(BOUND, "Order", "Where is order HF-7001?",
+                                                      "<so-1@harbor-foods.example>")})
         route(hub)
         [item] = intake.list_items(hub)["items"]
         deadline = time.time() + 120

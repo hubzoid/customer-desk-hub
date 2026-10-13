@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import LocalRunner, load_sample, triage_envelope
+from conftest import LocalRunner, dataset_file, envelope, triage_envelope
 from customer_desk import actions, bindings, cases, envelopes, pipeline, store
 from customer_desk.erpnext import config as erp_config
 from customer_desk.erpnext.contract import ERPContext, ERPError
@@ -38,6 +38,7 @@ def test_binding_exact_ambiguous_revoked(hub):
 
 
 def test_import_plans_conflicts_without_writing(hub):
+    erp_config.sample_edit(hub, "customers", "SYN-CUST-004", "disabled", 1)
     erp = erp_config.backend(hub)
     ctx = ERPContext(hub_id="h", company=CO)
 
@@ -47,15 +48,18 @@ def test_import_plans_conflicts_without_writing(hub):
         except ERPError:
             return None
 
-    plan = bindings.plan_import(store.connect(hub), (hub / "fixtures" / "bindings.csv").read_text(), company=CO,
-                                customer_lookup=lookup)
-    assert len(plan["adds"]) == 6
-    assert [c["reason"] for c in plan["conflicts"]] == ["Customer SYN-CUST-004 is disabled in ERPNext."]
+    text = dataset_file(hub, "bindings.csv").read_text() + f"{CO},email,new.buyer@unknown-co.example,Customer,SYN-CUST-099,\n"
+    plan = bindings.plan_import(store.connect(hub), text, company=CO, customer_lookup=lookup)
+    assert len(plan["adds"]) == 6                                   # Harbor Foods, Alpine Hardware, Prairie Clinics
+    assert [c["reason"] for c in plan["conflicts"]] == ["Customer SYN-CUST-004 is disabled in ERPNext."] * 2 + [
+        "ERPNext has no customer SYN-CUST-099 for this company."]
+    assert len(plan["rejects"]) == 6                                # the supplier rows belong to the Order desk
+    assert all("not customers" in r["reason"] for r in plan["rejects"])
     assert bindings.list_bindings(store.connect(hub)) == []
 
 
 def test_unbound_sender_reads_nothing(hub):
-    env = load_sample(hub, "fixtures/intake/unknown-sender.jsonl")[0]
+    env = envelope(hub, "CD-A01")
     runner = LocalRunner(hub)
     opened, result, _ = triage_envelope(hub, env, runner)
     assert result["state"] == "binding_required"
@@ -67,7 +71,7 @@ def test_unbound_sender_reads_nothing(hub):
 
 
 def test_binding_admin_binds_then_desk_reads(bound):
-    env = load_sample(bound, "fixtures/intake/unknown-sender.jsonl")[0]
+    env = envelope(bound, "CD-A01")
     opened, _, _ = triage_envelope(bound, env)
     started = []
 
@@ -81,8 +85,12 @@ def test_binding_admin_binds_then_desk_reads(bound):
                           "SYN-CUST-001", start=start)
     assert exc.value.code == "permission_denied"
     with pytest.raises(actions.ActionError) as exc:
-        actions.bind_case(bound, opened["number"], admin, "SYN-CUST-004", start=start)
+        actions.bind_case(bound, opened["number"], admin, "SYN-CUST-099", start=start)
     assert exc.value.code == "binding_conflict"
+    erp_config.sample_edit(bound, "customers", "SYN-CUST-004", "disabled", 1)
+    with pytest.raises(actions.ActionError) as exc:
+        actions.bind_case(bound, opened["number"], admin, "SYN-CUST-004", start=start)
+    assert exc.value.code == "binding_conflict" and "disabled" in exc.value.message
     out = actions.bind_case(bound, opened["number"], admin, "SYN-CUST-001", start=start)
     assert out["customer"] == "SYN-CUST-001" and started[0][1]["input"]["kind"] == "bound"
     result = pipeline.triage(bound, opened["case_id"], LocalRunner(bound), trigger="bound")
@@ -92,45 +100,67 @@ def test_binding_admin_binds_then_desk_reads(bound):
 def test_party_scope_returns_not_found_for_foreign_records(hub):
     erp = erp_config.backend(hub)
     mine = ERPContext(hub_id="h", company=CO, party_scope="SYN-CUST-001")
-    assert erp.get_record("sales_orders", "SYN-SO-0001", mine)["id"] == "SYN-SO-0001"
-    for resource, rid in (("sales_orders", "SYN-SO-0004"), ("sales_invoices", "SYN-SINV-0004"),
-                          ("customers", "SYN-CUST-002")):
+    assert erp.get_record("sales_orders", "SAL-ORD-2000-00001", mine)["id"] == "SAL-ORD-2000-00001"
+    for resource, rid, missing in (("sales_orders", "SAL-ORD-2000-00003", "SAL-ORD-2000-09999"),
+                                   ("sales_invoices", "ACC-SINV-2000-00002", "ACC-SINV-2000-09999"),
+                                   ("customers", "SYN-CUST-002", "SYN-CUST-999")):
         with pytest.raises(ERPError) as exc:
             erp.get_record(resource, rid, mine)
         assert exc.value.code == "not_found"
         with pytest.raises(ERPError) as exc2:
-            erp.get_record(resource, "SYN-NOPE-9999", mine)
+            erp.get_record(resource, missing, mine)
         # A foreign record and a missing one read the same, so existence never leaks.
-        assert exc.value.message.replace(rid, "X") == exc2.value.message.replace("SYN-NOPE-9999", "X")
+        assert exc2.value.code == "not_found"
+        assert exc.value.message.replace(rid, "X") == exc2.value.message.replace(missing, "X")
     rows = erp.list_records("sales_invoices", {"limit": 50}, mine)
     assert {r["fields"]["customer"] for r in rows} == {"SYN-CUST-001"}
-    prices = erp.list_records("prices", {"item_codes": ["SYN-ITEM-007"]}, mine)
-    assert all(p["fields"]["customer"] in (None, "SYN-CUST-001") for p in prices)
+    prices = erp.list_records("prices", {"item_codes": ["SYN-ITEM-009"]}, mine)
+    assert prices and all(p["fields"].get("customer") in (None, "", "SYN-CUST-001") for p in prices)
+    assert "SYN-IP-0024" not in {p["id"] for p in prices}           # Alpine Hardware's contract price
 
 
 def test_foreign_order_answers_not_found_without_details(bound):
-    env = [e for e in load_sample(bound) if e["provider_event_id"] == "syn-006"][0]
-    opened, _, _ = triage_envelope(bound, env)
+    opened, _, _ = triage_envelope(bound, envelope(bound, "CD-A02"))  # Alpine Hardware asks for Harbor Foods' invoice
     conn = store.connect(bound)
     case = store.get_case(conn, opened["case_id"])
-    reply = store.get_reply(conn, case["id"], case["current_reply"])
+    assert case["customer_id"] == "SYN-CUST-002"
     facts = store.get_facts(conn, case["id"], case["current_resolution"])
-    assert all(f["source"].get("party") in (None, "SYN-CUST-001") for f in facts)
-    assert "Lakeside" not in reply["rendered"] and "January 22" not in reply["rendered"]
+    assert all(f["source"].get("party") in (None, "SYN-CUST-002") for f in facts)
+    reply = store.get_reply(conn, case["id"], case["current_reply"]) if case["current_reply"] else None
+    text = (reply or {}).get("rendered") or ""
+    assert "Harbor" not in text and "299.40" not in text and "HF-7002" not in text
+    assert not (reply or {}).get("attachments")                     # no copy of the foreign invoice
 
 
 def test_desk_never_mounts_erp_write_tools(hub):
+    """The vendored backends keep their insert and submit methods (the files are
+    byte-equal to the Order desk's). The desk never reaches them: DeskERP has
+    read methods only, no desk code calls insert, submit or an ERP writer or
+    imports erp.write, the ERP package sends no POST, PUT or PATCH, and no tool
+    the hub mounts starts with erp_."""
     import ast
+    import inspect
 
     from conftest import HUB
+    from customer_desk.erpnext.adapter import DeskERP
 
-    erp_dir = HUB / "workflows" / "lib" / "customer_desk" / "erpnext"
-    for path in erp_dir.glob("*.py"):
-        tree = ast.parse(path.read_text())
-        names = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-        assert not names & {"create_draft", "submit_draft", "submit_approved", "update", "delete", "post"}, path
-    source = (erp_dir / "frappe_rest.py").read_text()
-    assert ".post(" not in source and ".put(" not in source and ".delete(" not in source
+    public = {n for n, _ in inspect.getmembers(DeskERP, inspect.isfunction) if not n.startswith("_")}
+    assert public == {"doctor", "get_print_pdf", "get_record", "list_records", "reader_context", "shape"}
+    desk = HUB / "workflows" / "lib" / "customer_desk"
+    for path in desk.rglob("*.py"):
+        in_erp = path.parent.name == "erpnext"
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                attr, owner = node.func.attr, node.func.value
+                where = f"{path.name}:{node.lineno} calls .{attr}()"
+                assert attr not in {"insert", "submit", "create_draft", "submit_draft", "submit_approved"}, where
+                if attr == "writer":
+                    assert isinstance(owner, ast.Name) and owner.id == "csv", where
+                if in_erp:
+                    assert attr not in {"post", "put", "patch", "delete"}, where
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                mods = [a.name for a in node.names] + [getattr(node, "module", None) or ""]
+                assert not any(m in ("erp.write", "erp.digest", "erp.bootstrap") for m in mods), path
     from hubzoid.loaders import tools_local
 
     names = set(tools_local.load_all(HUB))

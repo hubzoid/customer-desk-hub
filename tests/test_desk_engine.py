@@ -3,12 +3,11 @@ approvals, refusals, staleness, uncertain sends, crash recovery, the
 WhatsApp window and the Zoho Desk draft. Run with: pytest -m engine"""
 from __future__ import annotations
 
-import json
 import time
 
 import pytest
 
-from conftest import load_sample
+from conftest import envelope, load_sample
 from engine import OWNER, Engine, wait_case, wait_item, waiting_op
 
 pytestmark = pytest.mark.engine
@@ -64,7 +63,7 @@ def test_send_waits_for_requester_then_sends_once(bound, tmp_path):
     approve_mode(bound)
     engine = Engine(bound, tmp_path)
     try:
-        [number] = load(bound, {"syn-007"})
+        [number] = load(bound, {"CD-007"})
         out = ask_to_send(bound, number)
         assert out["state"] == "human_action_required"
         op = waiting_op(bound, out["work_item_id"])
@@ -77,8 +76,8 @@ def test_send_waits_for_requester_then_sends_once(bound, tmp_path):
         wait_item(bound, out["work_item_id"], ("completed",))
         c = wait_case(bound, number, ("resolved",))
         rows = replies.outbox_rows(bound)
-        assert len(rows) == 1 and rows[0]["recipients"] == ["accounts@synthetic-harbor.example"]
-        assert rows[0]["attachments"][0]["name"] == "SYN-SINV-0001.pdf"
+        assert len(rows) == 1 and rows[0]["recipients"] == ["purchasing@harbor-foods.example"]
+        assert rows[0]["attachments"][0]["name"] == "ACC-SINV-2000-00001.pdf"
         send = store.case_sends(store.connect(bound), c["id"])[0]
         assert send["receipt"]["note"] == "Sample outbox accepted the reply. No customer delivery."
         assert c["first_reply_accepted_at"]
@@ -94,7 +93,7 @@ def test_rejected_send_has_no_effect(bound, tmp_path):
     approve_mode(bound)
     engine = Engine(bound, tmp_path)
     try:
-        [number] = load(bound, {"syn-001"})
+        [number] = load(bound, {"CD-001"})
         out = ask_to_send(bound, number)
         op = waiting_op(bound, out["work_item_id"])
         service.deny(bound, op["id"], OWNER, reason="Wrong tone")
@@ -110,17 +109,16 @@ def test_fact_change_after_approval_refuses_the_send(bound, tmp_path):
     from hubzoid.work_items import service
 
     from customer_desk import replies, store
+    from customer_desk.erpnext import config as erp_config
 
     approve_mode(bound)
     engine = Engine(bound, tmp_path)
     try:
-        [number] = load(bound, {"syn-007"})
+        [number] = load(bound, {"CD-007"})
         out = ask_to_send(bound, number)
         op = waiting_op(bound, out["work_item_id"])
-        path = bound / "fixtures" / "erp" / "distributor-v1" / "sales_invoices.json"
-        rows = json.loads(path.read_text())
-        next(r for r in rows if r["name"] == "SYN-SINV-0001")["outstanding_amount"] = "250.00"   # a payment landed
-        path.write_text(json.dumps(rows))
+        erp_config.sample_edit(bound, "sales_invoices", "ACC-SINV-2000-00001", "outstanding_amount",
+                               "250.00")                     # a payment landed in ERPNext
         service.approve(bound, op["id"], OWNER, digest=op["args_digest"])
         wait_item(bound, out["work_item_id"], ("completed", "failed", "stopped"))
         assert replies.outbox_rows(bound) == []
@@ -146,11 +144,11 @@ def test_new_customer_message_supersedes_a_pending_send(bound, tmp_path):
     approve_mode(bound)
     engine = Engine(bound, tmp_path)
     try:
-        [number] = load(bound, {"syn-001"})
+        [number] = load(bound, {"CD-001"})
         out = ask_to_send(bound, number)
         waiting_op(bound, out["work_item_id"])
-        env = [e for e in load_sample(bound) if e["provider_event_id"] == "syn-001"][0]
-        follow = dict(env, provider_event_id="syn-001-b", text="Actually, can you also send invoice SYN-SINV-0002?")
+        follow = envelope(bound, "CD-001", provider_event_id="CD-001-b", provider_message_id="<cd-001-b@synthetic>",
+                          text="Actually, can you also send invoice ACC-SINV-2000-00001?")
         opened = cases.intake(bound, envelopes.from_envelope(follow))
         assert opened["action"] == "appended" and opened["number"] == number
         start_work(bound)("customer_desk_intake", key=f"t:{opened['case_id']}:2", route="triage",
@@ -172,7 +170,7 @@ def test_uncertain_send_is_never_resent_on_its_own(bound, tmp_path):
     approve_mode(bound)
     engine = Engine(bound, tmp_path, env={"DESK_SAMPLE_FAULT": "ambiguous"})
     try:
-        [number] = load(bound, {"syn-001"})
+        [number] = load(bound, {"CD-001"})
         out = ask_to_send(bound, number)
         op = waiting_op(bound, out["work_item_id"])
         service.approve(bound, op["id"], OWNER, digest=op["args_digest"])
@@ -197,7 +195,7 @@ def test_process_death_after_send_reconciles_without_a_second_send(bound, tmp_pa
     approve_mode(bound)
     engine = Engine(bound, tmp_path, env={"DESK_SAMPLE_FAULT": "die_after_write"})
     try:
-        [number] = load(bound, {"syn-001"})
+        [number] = load(bound, {"CD-001"})
         out = ask_to_send(bound, number)
         op = waiting_op(bound, out["work_item_id"])
         service.approve(bound, op["id"], OWNER, digest=op["args_digest"])
@@ -223,8 +221,7 @@ def test_whatsapp_window_closed_holds_the_reply(bound, tmp_path):
     approve_mode(bound, "sample-whatsapp")
     engine = Engine(bound, tmp_path)
     try:
-        env = [e for e in load_sample(bound) if e["provider_event_id"] == "syn-005"][0]
-        env = dict(env, received_at="2000-01-13T09:00:00Z")      # more than 24 hours before the desk's today
+        env = envelope(bound, "CD-005", received_at="2000-01-13T09:00:00Z")      # more than 24 hours before the desk's today
         opened = cases.intake(bound, envelopes.from_envelope(env))
         start_work(bound)("customer_desk_intake", key="t:wa", route="triage",
                           input={"kind": "case", "case_id": opened["case_id"], "seq": opened["seq"]}, requester="")
@@ -246,7 +243,7 @@ def test_crash_mid_triage_resumes_without_duplicates(bound, tmp_path):
 
     engine = Engine(bound, tmp_path, env={"DESK_SCRIPTED_DELAY": "4"})
     try:
-        env = [e for e in load_sample(bound) if e["provider_event_id"] == "syn-018"][0]
+        env = envelope(bound, "CD-018")
         opened = cases.intake(bound, envelopes.from_envelope(env))
         item = start_work(bound)("customer_desk_intake", key="t:crash", route="triage",
                                  input={"kind": "case", "case_id": opened["case_id"], "seq": opened["seq"]},
@@ -297,8 +294,8 @@ def test_zoho_ticket_becomes_tags_note_and_an_unsent_draft(zoho_hub, tmp_path):
     hub, fake = zoho_hub
     engine = Engine(hub, tmp_path)
     try:
-        t = fake.add_ticket(subject="Invoice copy", text="Please send a copy of invoice SYN-SINV-0001.",
-                            email="accounts@synthetic-harbor.example", first="Synthetic", last="Accounts",
+        t = fake.add_ticket(subject="Invoice copy", text="Please send a copy of invoice ACC-SINV-2000-00001.",
+                            email="purchasing@harbor-foods.example", first="Synthetic", last="Purchasing",
                             notify=False)
         item = start_work(hub)("customer_desk_intake", key=f"helpdesk:{t['id']}:1", route="triage",
                                input={"kind": "helpdesk", "ticket_id": t["id"]}, requester="")
@@ -308,9 +305,9 @@ def test_zoho_ticket_becomes_tags_note_and_an_unsent_draft(zoho_hub, tmp_path):
         assert c["state"] == "helpdesk_draft_saved"
         assert fake.tags[t["id"]] == {"desk-invoice-copy"}
         note = fake.comments[t["id"]][0]
-        assert note["isPublic"] is False and "SYN-SINV-0001" in note["content"] and "Sales Invoice" in note["content"]
+        assert note["isPublic"] is False and "ACC-SINV-2000-00001" in note["content"] and "Sales Invoice" in note["content"]
         drafts = fake.drafts(t["id"])
-        assert len(drafts) == 1 and "$1,250.00" in drafts[0]["plainText"] and drafts[0]["attachmentIds"]
+        assert len(drafts) == 1 and "$299.40" in drafts[0]["plainText"] and drafts[0]["attachmentIds"]
         assert fake.tickets[t["id"]]["cf"] == {"cf_desk_case": c["number"]}
         assert fake.forbidden == [] and fake.tickets[t["id"]]["status"] == "Open"
         assert not any("sendReply" in p for _, p, _ in fake.writes)
@@ -334,7 +331,7 @@ def test_zoho_dry_run_writes_nothing(zoho_hub, tmp_path):
     path.write_text(path.read_text().replace("DESK_HELPDESK_MODE: live", "DESK_HELPDESK_MODE: dry-run"))
     engine = Engine(hub, tmp_path)
     try:
-        t = fake.add_ticket(subject="Where", text="Where is order SYN-SO-0001?", email="buyer.one@synthetic-harbor.example",
+        t = fake.add_ticket(subject="Where", text="Where is order HF-7001?", email="purchasing@harbor-foods.example",
                             notify=False)
         item = start_work(hub)("customer_desk_intake", key=f"helpdesk:{t['id']}:1", route="triage",
                                input={"kind": "helpdesk", "ticket_id": t["id"]}, requester="")

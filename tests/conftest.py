@@ -18,8 +18,7 @@ sys.path.insert(0, str(HUB / "workflows" / "lib"))
 from customer_desk import bindings, cases, envelopes, pipeline, store  # noqa: E402
 from customer_desk.scripted import ScriptedStations  # noqa: E402
 
-COPY = ["AGENTS.md", "settings.yaml", "hub.settings.yaml", "hub.manifest.yaml", "knowledge", "connectors", "fixtures",
-        "agents", "evals", "work-items.yaml", "hitl.yaml", "workflows", "tools_local", "restricted", "identity",
+COPY = ["AGENTS.md", "settings.yaml", "hub.settings.yaml", "hub.manifest.yaml", "knowledge", "connectors", "agents", "evals", "work-items.yaml", "hitl.yaml", "workflows", "tools_local", "restricted", "identity",
         "cards", "mcp-apps.yaml", "doctor"]
 
 
@@ -70,7 +69,7 @@ def bound(hub):
             return None
 
     conn = store.connect(hub)
-    plan = bindings.plan_import(conn, (hub / "fixtures" / "bindings.csv").read_text(),
+    plan = bindings.plan_import(conn, dataset_file(hub, "bindings.csv").read_text(),
                                 company="Synthetic Meridian Distribution", customer_lookup=lookup)
     with store.tx(hub) as tconn:
         for a in plan["adds"]:
@@ -79,12 +78,28 @@ def bound(hub):
     return hub
 
 
-def load_sample(hub_dir, path="fixtures/intake/customer-desk-20.jsonl"):
+def dataset_file(hub_dir, *parts) -> Path:
+    """A file of the vendored distributor-v1 dataset in this hub copy."""
+    return Path(hub_dir) / "workflows" / "lib" / "erp" / "datasets" / "distributor-v1" / Path(*parts)
+
+
+def load_sample(hub_dir, name="customer-desk.jsonl"):
+    """The dataset's twenty Customer Desk requests, or another messages file by name
+    (customer-desk-adversarial.jsonl for the six adversarial ones)."""
     out = []
-    for line in (Path(hub_dir) / path).read_text().splitlines():
+    for line in dataset_file(hub_dir, "messages", name).read_text().splitlines():
         if line.strip():
             out.append(json.loads(line))
     return out
+
+
+def envelope(hub_dir, event_id, **over):
+    """One dataset request by its event id (CD-001, CD-A03), with fields replaced."""
+    for name in ("customer-desk.jsonl", "customer-desk-adversarial.jsonl"):
+        for env in load_sample(hub_dir, name):
+            if env["provider_event_id"] == event_id:
+                return dict(env, **over)
+    raise KeyError(event_id)
 
 
 def triage_envelope(hub_dir, env, runner=None):

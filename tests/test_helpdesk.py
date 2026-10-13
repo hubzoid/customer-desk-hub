@@ -50,7 +50,7 @@ def writer(hub, base, **kw):
 def test_reader_never_writes(hub, fake):
     f, base = fake
     r = zoho.Reader(creds(base), state_dir=hub / ".z")
-    t = f.add_ticket(subject="Order", text="Where is SYN-SO-0001?", email="a@synthetic-harbor.example", notify=False)
+    t = f.add_ticket(subject="Order", text="Where is HF-7001?", email="purchasing@harbor-foods.example", notify=False)
     assert r.ticket(t["id"])["subject"] == "Order"
     with pytest.raises(zoho.WriteRefused):
         r._request("POST", f"/tickets/{t['id']}/sendReply", body={"content": "x"})
@@ -59,13 +59,13 @@ def test_reader_never_writes(hub, fake):
 
 def test_writer_reaches_only_its_endpoints(hub, fake):
     f, base = fake
-    t = f.add_ticket(subject="Order", text="Hi", email="a@synthetic-harbor.example", notify=False)
+    t = f.add_ticket(subject="Order", text="Hi", email="purchasing@harbor-foods.example", notify=False)
     w = writer(hub, base)
     mark = zoho.marker(t["id"], "k")
     w.associate_tags(t["id"], ["desk-order-status"])
     w.private_note(t["id"], f"Facts...\n{mark}")
     w.set_case_field(t["id"], "CD-000001")
-    w.draft_reply(t["id"], from_address="support@desk.example", to="a@synthetic-harbor.example",
+    w.draft_reply(t["id"], from_address="support@desk.example", to="purchasing@harbor-foods.example",
                   html=desk.draft_html("Hello", mark), in_reply_to=None)
     assert f.tags[t["id"]] == {"desk-order-status"}
     assert f.comments[t["id"]][0]["isPublic"] is False
@@ -89,7 +89,7 @@ def test_writer_reaches_only_its_endpoints(hub, fake):
 
 def test_stop_switch_is_read_at_write_time(hub, fake, monkeypatch):
     f, base = fake
-    t = f.add_ticket(subject="Order", text="Hi", email="a@synthetic-harbor.example", notify=False)
+    t = f.add_ticket(subject="Order", text="Hi", email="purchasing@harbor-foods.example", notify=False)
     w = writer(hub, base)
     (store.db_path(hub).parent / "STOP_WRITES").write_text("stop")
     with pytest.raises(zoho.WritesBlocked):
@@ -105,7 +105,7 @@ def test_stop_switch_is_read_at_write_time(hub, fake, monkeypatch):
 
 def test_shadow_mode_prefixes_tags_and_refuses_notes_and_drafts(hub, fake):
     f, base = fake
-    t = f.add_ticket(subject="Order", text="Hi", email="a@synthetic-harbor.example", notify=False)
+    t = f.add_ticket(subject="Order", text="Hi", email="purchasing@harbor-foods.example", notify=False)
     w = writer(hub, base, mode="shadow", drafts=False)
     with pytest.raises(zoho.WriteRefused):
         w.associate_tags(t["id"], ["desk-complaint"])
@@ -117,7 +117,7 @@ def test_shadow_mode_prefixes_tags_and_refuses_notes_and_drafts(hub, fake):
 
 def test_draft_preflight_rereads_the_ticket(hub, fake):
     f, base = fake
-    t = f.add_ticket(subject="Order", text="Where is it?", email="a@synthetic-harbor.example", notify=False)
+    t = f.add_ticket(subject="Order", text="Where is it?", email="purchasing@harbor-foods.example", notify=False)
     r = zoho.Reader(creds(base), state_dir=hub / ".z")
     inbound = desk.latest_inbound(r.threads(t["id"]))
     mark = zoho.marker(t["id"], "k1")
@@ -127,7 +127,7 @@ def test_draft_preflight_rereads_the_ticket(hub, fake):
     inbound = desk.latest_inbound(r.threads(t["id"]))
     f._thread(t["id"], direction="out", text="An agent answered", sender="agent@desk.example")
     assert desk.preflight_draft(r, t["id"], inbound["id"], mark)[0] == "answered"
-    t2 = f.add_ticket(subject="Two", text="Hello", email="b@synthetic-harbor.example", notify=False)
+    t2 = f.add_ticket(subject="Two", text="Hello", email="orders@alpine-hardware.example", notify=False)
     in2 = desk.latest_inbound(r.threads(t2["id"]))
     f._thread(t2["id"], direction="out", text="someone's draft", sender="x@desk.example", status="DRAFT")
     assert desk.preflight_draft(r, t2["id"], in2["id"], zoho.marker(t2["id"], "k"))[0] == "other_draft"
@@ -137,7 +137,7 @@ def test_draft_preflight_rereads_the_ticket(hub, fake):
 
 def test_own_writes_do_not_loop(hub, fake):
     f, base = fake
-    t = f.add_ticket(subject="Order", text="Where is it?", email="a@synthetic-harbor.example", notify=False)
+    t = f.add_ticket(subject="Order", text="Where is it?", email="purchasing@harbor-foods.example", notify=False)
     r = zoho.Reader(creds(base), state_dir=hub / ".z")
     got = desk.read_ticket(r, t["id"])
     assert desk.claim_message(hub, got["ticket"], str(got["inbound"]["id"])) is True
@@ -151,7 +151,7 @@ def test_own_writes_do_not_loop(hub, fake):
 
 def test_token_refresh_on_401_and_retry_on_503(hub, fake):
     f, base = fake
-    t = f.add_ticket(subject="Order", text="Hi", email="a@synthetic-harbor.example", notify=False)
+    t = f.add_ticket(subject="Order", text="Hi", email="purchasing@harbor-foods.example", notify=False)
     r = zoho.Reader(creds(base), state_dir=hub / ".z")
     r.ticket(t["id"])
     f.tokens.clear()                     # the cached token is no longer valid
@@ -171,21 +171,21 @@ def test_webhook_body_only_names_a_ticket():
 
 def test_mode_is_read_at_write_time(hub, fake):
     f, base = fake
-    t = f.add_ticket(subject="Order", text="Hi", email="a@synthetic-harbor.example", notify=False)
+    t = f.add_ticket(subject="Order", text="Hi", email="purchasing@harbor-foods.example", notify=False)
     w = writer(hub, base)                       # made while the hub is live with drafts
     set_mode(hub, "dry-run")                    # switched while a triage runs
     with pytest.raises(zoho.WritesBlocked):
         w.associate_tags(t["id"], ["desk-order-status"])
     set_mode(hub, "live", drafts=False)         # drafts switched off
     with pytest.raises(zoho.WriteRefused):
-        w.draft_reply(t["id"], from_address="support@desk.example", to="a@synthetic-harbor.example",
+        w.draft_reply(t["id"], from_address="support@desk.example", to="purchasing@harbor-foods.example",
                       html=desk.draft_html("Hello", zoho.marker(t["id"], "k")), in_reply_to=None)
     assert f.drafts(t["id"]) == [] and f.tags.get(t["id"], set()) == set()
 
 
 def test_a_write_refreshes_a_revoked_token_once(hub, fake):
     f, base = fake
-    t = f.add_ticket(subject="Order", text="Hi", email="a@synthetic-harbor.example", notify=False)
+    t = f.add_ticket(subject="Order", text="Hi", email="purchasing@harbor-foods.example", notify=False)
     w = writer(hub, base)
     w.associate_tags(t["id"], ["desk-order-status"])
     f.tokens.clear()                            # the cached token was revoked
@@ -195,9 +195,9 @@ def test_a_write_refreshes_a_revoked_token_once(hub, fake):
 
 def test_draft_html_renders_statement_tables_and_escapes_values():
     mark = zoho.marker("1", "k")
-    out = desk.draft_html("Hello,\n\n| Invoice | Outstanding |\n|---|---|\n| SYN-SINV-0001 | $1,250.00 <x> |\n\n"
+    out = desk.draft_html("Hello,\n\n| Invoice | Outstanding |\n|---|---|\n| ACC-SINV-2000-00001 | $1,250.00 <x> |\n\n"
                           "- one\n- two\n\nKind regards,\nDesk", mark)
-    assert "<table" in out and "<td>SYN-SINV-0001</td>" in out and "&lt;x&gt;" in out
+    assert "<table" in out and "<td>ACC-SINV-2000-00001</td>" in out and "&lt;x&gt;" in out
     assert "<ul><li>one</li><li>two</li></ul>" in out and "<p>Kind regards,<br>Desk</p>" in out
     assert zoho.MARKER_RE.search(out) and "|---" not in out
 
@@ -205,7 +205,7 @@ def test_draft_html_renders_statement_tables_and_escapes_values():
 def test_note_carries_the_new_reply_when_an_older_desk_draft_blocks_it():
     view = {"case": {"number": "CD-000016", "state": "needs_owner", "queue": "delivery", "customer_id": "SYN-CUST-001"},
             "resolution": {"requests": []}, "facts": [], "tickets": [],
-            "reply": {"revision": 2, "rendered": "Order SYN-SO-0001 is now due on January 27, 2000.",
+            "reply": {"revision": 2, "rendered": "Order HF-7001 is now due on January 27, 2000.",
                       "checks": {"results": [{"id": "limits", "status": "pass"}]}}}
     mark = zoho.marker("10002", "c:2")
     plain = desk.note_for(view, mark)

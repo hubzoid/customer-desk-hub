@@ -1,12 +1,12 @@
 version: 1
 id: ambiguous-items
 tags: [conversation]
-persona: summit
+persona: prairie
 steps:
-  - customer: "How much are your corrugated boxes for us, and do you have them in stock?"
+  - customer: "How much are your hex bolts for us, and do you have them in stock?"
 expect:
   state: needs_owner
   categories: [price_availability]
   outcomes: [candidates]
-  must_include: ["Synthetic corrugated box, small", "Synthetic corrugated box, large"]
-  must_not_include: ["$1.05", "$2.25"]
+  must_include: ["Synthetic Hex Bolt M8 x 40", "Synthetic Hex Bolt M8 x 60"]
+  must_not_include: ["$0.48", "$0.55", "$0.42"]

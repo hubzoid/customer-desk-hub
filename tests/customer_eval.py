@@ -39,18 +39,27 @@ sys.path.insert(0, str(HUB / "tests"))
 import yaml  # noqa: E402
 
 OWNER = "admin@localhost"
-COPY = ["AGENTS.md", "settings.yaml", "hub.settings.yaml", "hub.manifest.yaml", "knowledge", "connectors", "fixtures",
-        "agents", "work-items.yaml", "hitl.yaml", "workflows", "tools_local", "restricted", "identity", "cards",
+DATASET = HUB / "workflows" / "lib" / "erp" / "datasets" / "distributor-v1"
+COPY = ["AGENTS.md", "settings.yaml", "hub.settings.yaml", "hub.manifest.yaml", "knowledge", "connectors", "agents", "work-items.yaml", "hitl.yaml", "workflows", "tools_local", "restricted", "identity", "cards",
         "mcp-apps.yaml", "doctor"]
 
 
 # -- cases -------------------------------------------------------------------------------------
 
+def dataset_messages(name: str) -> dict[str, dict]:
+    """The vendored dataset's request envelopes by event id."""
+    out = {}
+    for line in (DATASET / "messages" / name).read_text().splitlines():
+        if line.strip():
+            env = json.loads(line)
+            out[env["provider_event_id"]] = env
+    return out
+
+
 def load_cases(tags: set[str] | None, only: set[str] | None) -> list[dict]:
     cases = []
     expected = json.loads((HUB / "evals" / "expected" / "customer-desk-20.json").read_text())
-    for line in (HUB / "fixtures" / "intake" / "customer-desk-20.jsonl").read_text().splitlines():
-        env = json.loads(line)
+    for env in dataset_messages("customer-desk.jsonl").values():
         exp = expected[env["provider_event_id"]]
         cases.append({"id": f"request-{env['provider_event_id']}", "tags": ["requests"], "envelope": env,
                       "steps": [{"customer": env["text"], "subject": env.get("subject")}],
@@ -59,6 +68,13 @@ def load_cases(tags: set[str] | None, only: set[str] | None) -> list[dict]:
                                  "tickets": exp.get("tickets"), "proposals": exp.get("proposals"),
                                  "decisions": exp.get("decisions"), "must_include": exp.get("must_include", []),
                                  "must_not_include": exp.get("must_not_include", []), "outbox": 0}})
+    requests = dataset_messages("customer-desk.jsonl")
+    adversarial = json.loads((HUB / "evals" / "expected" / "customer-desk-adversarial.json").read_text())
+    for event, env in dataset_messages("customer-desk-adversarial.jsonl").items():
+        exp = adversarial[event]
+        cases.append({"id": f"adversarial-{event}", "tags": ["safety", "adversarial"], "envelope": env,
+                      "before": [requests[e] for e in exp.get("before", [])],
+                      "steps": [{"customer": env["text"]}], "expect": exp["expect"]})
     for folder in ("conversations", "safety"):
         for path in sorted((HUB / "evals" / folder).glob("*.yaml")):
             data = yaml.safe_load(path.read_text())
@@ -114,10 +130,24 @@ def make_hub(root: Path, runtime: str, write_mode: str | None) -> Path:
 
 
 def dataset_hash(hub: Path) -> str:
+    """Every file of the vendored dataset, so a write to it shows."""
     h = hashlib.sha256()
-    for path in sorted((hub / "fixtures" / "erp").rglob("*.json")):
-        h.update(path.name.encode() + path.read_bytes())
+    root = hub / "workflows" / "lib" / "erp" / "datasets" / "distributor-v1"
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        h.update(str(path.relative_to(root)).encode() + b"\0" + path.read_bytes())
     return h.hexdigest()
+
+
+def erp_documents(hub: Path) -> set[tuple[str, str]]:
+    """The documents the sample ERP holds beyond the dataset: drafts it saved
+    and edits standing in for a person. The desk never adds one."""
+    from contextlib import closing
+
+    from customer_desk.erpnext import config as erp_config
+
+    transport = erp_config.service(hub).transport()
+    with closing(transport._db()) as db:
+        return {(r[0], r[1]) for r in db.execute("SELECT doctype, name FROM sample_docs")}
 
 
 def run_case(case: dict, runtime: str, trial: int, keep: bool = False) -> dict:
@@ -136,7 +166,9 @@ def run_case(case: dict, runtime: str, trial: int, keep: bool = False) -> dict:
     try:
         import_bindings(hub)
         engine = Engine(hub, root, env={"DESK_SCRIPTED_STATIONS": "1" if runtime == "scripted" else ""})
-        state = {"case": None}
+        state = {"case": None, "erp_edits": set(), "erp_before": erp_documents(hub)}
+        for env in case.get("before") or []:
+            do_envelope(hub, env, state)
         for n, step in enumerate(case["steps"], start=1):
             do_step(hub, case, n, step, state)
         result.update(grade(hub, case, state, before))
@@ -160,8 +192,8 @@ def import_bindings(hub: Path) -> None:
     from customer_desk import actions
     from customer_desk.cli import import_bindings as do_import
 
-    do_import(hub, (hub / "fixtures" / "bindings.csv").read_text(), dry_run=False, synthetic=True,
-              actor=actions.Actor(OWNER, lambda r: True))
+    text = (hub / "workflows" / "lib" / "erp" / "datasets" / "distributor-v1" / "bindings.csv").read_text()
+    do_import(hub, text, dry_run=False, synthetic=True, actor=actions.Actor(OWNER, lambda r: True))
 
 
 def owner():
@@ -194,12 +226,7 @@ def do_step(hub: Path, case: dict, n: int, step: dict, state: dict) -> None:
 
     start = start_work(hub)
     if "customer" in step:
-        opened = cases.intake(hub, envelopes.from_envelope(envelope_for(case, n, step)))
-        state["case"] = opened["case_id"]
-        item = start("customer_desk_intake", key=f"eval:{opened['case_id']}:{opened['seq']}", route="triage",
-                     input={"kind": "case", "case_id": opened["case_id"], "seq": opened["seq"]}, requester="")
-        wait_item(hub, item["id"])
-        settle(hub, opened["case_id"])
+        do_envelope(hub, envelope_for(case, n, step), state)
         return
     c = store.get_case(store.connect(hub), state["case"])
     op = step.get("operator")
@@ -236,22 +263,38 @@ def do_step(hub: Path, case: dict, n: int, step: dict, state: dict) -> None:
         actions.revoke_binding(hub, owner(), c["binding_id"])
         return
     if "erp_change" in step:
+        # A person changes ERPNext: the sample backend records the newer copy in its own state.
+        from erp.resources import RESOURCES
+
+        from customer_desk.erpnext import config as erp_config
+
         ch = step["erp_change"]
-        path = hub / "fixtures" / "erp" / "distributor-v1" / ch["file"]
-        rows = json.loads(path.read_text())
-        next(r for r in rows if r["name"] == ch["name"])[ch["field"]] = ch["value"]
-        path.write_text(json.dumps(rows))
+        erp_config.sample_edit(hub, ch["resource"], ch["name"], ch["field"], ch["value"])
+        state["erp_edits"].add((RESOURCES[ch["resource"]].doctype, ch["name"]))
         return
     if step.get("wait_redraft"):
         deadline = time.time() + 600
         while time.time() < deadline:
             c = settle(hub, c["id"])
-            if c["current_reply"] and c["current_reply"] >= 2 and c["state"] == "needs_owner":
+            # A claimed case stays with its operator (in_review) when it is redrafted.
+            if c["current_reply"] and c["current_reply"] >= 2 and c["state"] in ("needs_owner", "in_review"):
                 return
             time.sleep(1)
         raise TimeoutError("no redraft")
     if op:
         raise ValueError(f"unknown operator step {op}")
+
+
+def do_envelope(hub: Path, env: dict, state: dict) -> None:
+    from customer_desk import cases, envelopes
+    from customer_desk.flows import start_work
+
+    opened = cases.intake(hub, envelopes.from_envelope(env))
+    state["case"] = opened["case_id"]
+    item = start_work(hub)("customer_desk_intake", key=f"eval:{opened['case_id']}:{opened['seq']}", route="triage",
+                           input={"kind": "case", "case_id": opened["case_id"], "seq": opened["seq"]}, requester="")
+    wait_item(hub, item["id"])
+    settle(hub, opened["case_id"])
 
 
 def wait_item(hub, item_id, states=("completed", "failed", "stopped", "cancelled"), timeout=900):
@@ -379,8 +422,13 @@ def grade(hub: Path, case: dict, state: dict, before: str) -> dict:
     for t in exp.get("must_not_include") or []:
         if t.lower() in all_text.lower():
             problems.append(f"forbidden text {t!r} appeared")
-    if not exp.get("erp_changed") and dataset_hash(hub) != before:
-        problems.append("the ERP data changed")
+    if dataset_hash(hub) != before:
+        problems.append("the ERP dataset files changed")
+    added = erp_documents(hub) - state["erp_before"] - state["erp_edits"]
+    if added:
+        problems.append(f"the desk wrote ERP documents: {sorted(added)}")
+    if "cases" in exp:
+        want("cases", conn.execute("SELECT COUNT(*) AS n FROM cases").fetchone()["n"])
     if reply is not None and c["state"] not in ("binding_required",) and not reply["checks"]["passed"]:
         failed = [x["id"] for x in reply["checks"]["results"] if x["status"] == "fail"]
         problems.append(f"the current reply fails checks: {failed}")

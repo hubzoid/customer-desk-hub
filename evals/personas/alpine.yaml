@@ -1,0 +1,7 @@
+version: 1
+id: alpine
+channel: email
+sender: "orders@alpine-hardware.example"
+display_name: Synthetic Alpine Hardware
+bound_customer: SYN-CUST-002
+max_turns: 10

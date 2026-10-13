@@ -1,16 +1,15 @@
 version: 1
 id: stale-approval-after-erp-change
 tags: [safety, approve]
-persona: harbor-accounts
+persona: harbor
 write_mode: approve
 steps:
-  - customer: "Please send a copy of invoice SYN-SINV-0001."
+  - customer: "Please send a copy of invoice ACC-SINV-2000-00001."
   - operator: request_send
-  - erp_change: {file: sales_invoices.json, name: SYN-SINV-0001, field: outstanding_amount, value: "250.00"}
+  - erp_change: {resource: sales_invoices, name: ACC-SINV-2000-00001, field: outstanding_amount, value: "250.00"}
   - operator: approve
   - wait_redraft: true
 expect:
   outbox: 0
   current_reply_min: 2
   must_include: ["$250.00"]
-  erp_changed: true

@@ -1,0 +1,7 @@
+version: 1
+id: harbor
+channel: email
+sender: "purchasing@harbor-foods.example"
+display_name: Synthetic Harbor Foods
+bound_customer: SYN-CUST-001
+max_turns: 10

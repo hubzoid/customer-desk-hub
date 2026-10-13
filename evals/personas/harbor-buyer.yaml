@@ -1,7 +1,0 @@
-version: 1
-id: harbor-buyer
-channel: email
-sender: "buyer.one@synthetic-harbor.example"
-display_name: Synthetic Avery
-bound_customer: SYN-CUST-001
-max_turns: 10

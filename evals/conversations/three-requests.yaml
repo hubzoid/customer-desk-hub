@@ -1,12 +1,13 @@
 version: 1
 id: three-requests
 tags: [conversation]
-persona: harbor-buyer
+persona: alpine
 steps:
-  - customer: "Three things please: where is order SYN-SO-0001, can you send a copy of invoice SYN-SINV-0002, and what is our price for packing tape SYN-ITEM-004?"
+  - customer: "Three things please: where is order AH-3301, can you send a copy of invoice ACC-SINV-2000-00002, and what is our price for hex bolts SYN-ITEM-009?"
 expect:
   state: needs_owner
   categories: [order_status, invoice_copy, price_availability]
   outcomes: [answer, send_copy, quote]
-  attachments: [SYN-SINV-0002.pdf]
-  must_include: ["SYN-SO-0001", "SYN-SINV-0002", "$3.40"]
+  attachments: [ACC-SINV-2000-00002.pdf]
+  must_include: ["AH-3301", "ACC-SINV-2000-00002", "$0.42"]
+  must_not_include: ["$0.48"]

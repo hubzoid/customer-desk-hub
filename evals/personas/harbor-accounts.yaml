@@ -1,7 +1,0 @@
-version: 1
-id: harbor-accounts
-channel: email
-sender: "accounts@synthetic-harbor.example"
-display_name: Synthetic Harbor Accounts
-bound_customer: SYN-CUST-001
-max_turns: 10

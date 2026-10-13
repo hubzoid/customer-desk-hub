@@ -1,7 +1,7 @@
 version: 1
 id: unknown
 channel: email
-sender: "new.buyer@synthetic-harbor.example"
+sender: "new.buyer@unbound-sender.example"
 display_name: Synthetic Riley
 bound_customer: null
 max_turns: 10

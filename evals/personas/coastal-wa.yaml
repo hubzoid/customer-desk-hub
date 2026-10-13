@@ -1,0 +1,7 @@
+version: 1
+id: coastal-wa
+channel: whatsapp
+sender: "+12025550104"
+display_name: Synthetic Coastal Cafes
+bound_customer: SYN-CUST-004
+max_turns: 10

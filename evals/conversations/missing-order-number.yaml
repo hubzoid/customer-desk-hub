@@ -1,13 +1,13 @@
 version: 1
 id: missing-order-number
 tags: [conversation]
-persona: lakeside
+persona: harbor
 steps:
   - customer: "Hi, any news on our order? We have not had an update."
-  - customer: "Sorry, I mean order SYN-SO-0004."
+  - customer: "Sorry, I mean order HF-7001."
 expect:
   state: needs_owner
   categories: [order_status]
   outcomes: [answer]
-  must_include: ["SYN-SO-0004", "January 22, 2000"]
+  must_include: ["HF-7001", "January 20, 2000"]
   outbox: 0

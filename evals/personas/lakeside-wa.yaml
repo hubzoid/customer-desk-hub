@@ -1,7 +1,0 @@
-version: 1
-id: lakeside-wa
-channel: whatsapp
-sender: "+15550100102"
-display_name: Synthetic Blake
-bound_customer: SYN-CUST-002
-max_turns: 10
