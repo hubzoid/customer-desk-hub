@@ -8,7 +8,8 @@ DRAFT for review. Every refusal has a stable code, a safe message and the next s
 | `desk_policy_invalid` | The policy has a problem at the file, line and key shown. | Fix it and run `./desk policy validate`. The last valid policy stays active. |
 | `desk_policy_gap` | The policy leaves a setting to its default. | Add it, or confirm the default in a reviewed change. |
 | `desk_vocabulary_invalid` | The request kinds or reply style file is wrong. | Fix the file named. |
-| `erp_not_read_only` | `connectors/erpnext.yaml` allows writes. | Set `writes_enabled: false`. The desk never needs ERP writes. |
+| `erp_not_read_only` | `connectors/erpnext.yaml` allows writes, or names a submit credential. | Set `writes_enabled: false` and `submit_credential_ref: null`, then `./desk erp-configure`. The desk never needs ERP writes. |
+| `sample_only` | `desk sample erp-set` or `desk sample reset` ran while the connector is not the sample backend. | These commands change only the sample ERP. Switch back with `backend: sample` and `./desk erp-configure`. |
 | `erp_company_mismatch` | `DESK_COMPANY` differs from the connector company. | Make them equal. |
 | `erp_print_unavailable` | The integration user cannot print the invoice with the configured format. | Ask the ERP administrator for print permission on that format. |
 | `erp_unavailable`, `erp_rate_limited` | ERPNext did not answer. Nothing was sent. | Rerun the case later. |
@@ -19,7 +20,7 @@ DRAFT for review. Every refusal has a stable code, a safe message and the next s
 | `binding_invalid` | The sender is not a valid address or E.164 number. | Correct it. |
 | `permission_denied` | You do not hold the desk role this needs. | Ask the agent's manager. |
 | `claim_required`, `claim_conflict` | The case is not yours, or someone else holds it (shown with since when). | Claim it, or ask them. |
-| `revision_conflict`, `state_conflict` | The case changed since you loaded it. | Reload. |
+| `revision_conflict`, `state_conflict` | The case changed since you loaded it, or someone applied another ERP configuration at the same time. | Reload, or run `./desk erp-configure` again. |
 | `reply_stale` | Facts, policy, style, the sender's binding or the thread changed after the draft. Nothing was sent. | Review the new revision. |
 | `claim_lost`, `role_lost` | By the time you approved, you no longer held the case or the desk operator role. Nothing was sent. | Claim the case again and ask to send. |
 | `recipient_changed` | The helpdesk ticket's contact is no longer the case's bound sender. No draft was written. | Check the ticket in the helpdesk. |

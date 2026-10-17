@@ -24,7 +24,8 @@ The desk is a Hubzoid hub folder. It adds no code to the Hubzoid SDK and runs on
 | `hitl.yaml` | Which chat tools always show the exact action and wait for the person. |
 | `cards/`, `mcp-apps.yaml` | The queue, case, metrics and approval cards. |
 | `doctor/checks.py`, `hub.manifest.yaml` | Setup checks. |
-| `fixtures/` | The synthetic distributor's ERP data, the twenty requests, sender bindings. |
+| `workflows/lib/erp` | The ERP module, an exact copy of the read parts of the Order & Invoice Desk's canonical module (see `erp/VENDORED.md`), with its `distributor-v1` dataset: the synthetic distributor's ERPNext records, the twenty Customer Desk requests, six adversarial ones and the sender bindings. |
+| `workflows/lib/customer_desk/erpnext` | The desk's read-only adapter over that module. |
 | `evals/` | Personas, conversations, safety cases and the expected outcomes. |
 | `desk` | The command line. |
 
@@ -80,7 +81,15 @@ The desk's own records live in `.hubzoid/data/customer-desk.sqlite` in the hub's
 
 ## ERPNext
 
-`workflows/lib/customer_desk/erpnext/` is an interim read layer written to the HUB-108 contract: sample, fake REST and live Frappe backends, read only. It is replaced by a vendored copy of the read parts of the Order & Invoice Desk's canonical module, marked with its source commit, when that lands.
+The ERP code is the Order & Invoice Desk's canonical module (decision B042). `workflows/lib/erp/` is a byte-for-byte copy of its read parts and its `distributor-v1` dataset, taken from order-invoice-desk-hub commit 4c37c70. `erp/VENDORED.md` names the commit, lists what was left out (`write.py`, `digest.py`, `bootstrap.py`) and holds a sha256 for every file. `tests/test_vendored_erp.py` fails if any byte differs, if the dataset no longer matches its own manifest, or if the write contract comes back. `scripts/check_vendored_erp.py` compares the copy with the canonical commit itself. A bug found in the copy is fixed once in the canonical module and copied again, never patched here.
+
+The desk reaches the module only through `workflows/lib/customer_desk/erpnext/`:
+
+- `config.load` takes the configuration in force from the module (`connectors/erpnext.yaml`, applied as a numbered revision with `./desk erp-configure`) and refuses it with `erp_not_read_only` if `writes_enabled` is true or a submit credential is set. Doctor runs the same check on the file and reports an edit not yet applied as drift.
+- `adapter.DeskERP` has read methods only: get a record, list records, the official invoice print, and the doctor reads. Every read carries the case's bound customer as `party_scope`, so another customer's record reads as `not_found`, and only six resources are allowed: customers, items, prices, availability, sales orders and sales invoices. Stock counts only the configured warehouses.
+- The vendored backends keep their own `insert` and `submit` methods, because the files are unchanged. Nothing in the desk calls them, asks the module for a writer or imports a write module, and a test walks every desk source file to keep it that way.
+
+Backends: `sample` (the dataset plus a local state file, no network), `fake_rest` (the real REST client against the module's fake Frappe server on loopback) and `frappe_rest` (a live site, read only). The sample's state file is also where `./desk sample erp-set` records a person's stand-in ERP change for a demo, as a newer copy of one document. The dataset files never change.
 
 ## What the SDK does not have yet (the later list)
 

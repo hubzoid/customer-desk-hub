@@ -28,12 +28,12 @@ Say: "The model never types a number. Every value comes from ERPNext and you can
 
 - "Show the decisions queue." One refund is outside policy and waits for the exception team. "The desk does not promise money back. It asks the person who can decide."
 - "Show the complaints queue." A damaged delivery is a ticket with an owner.
-- One order belongs to another customer. The desk answers "not found", the same as a missing order, so it never leaks that the order exists.
+- Optional: `desk sample load --adversarial` adds a request from Alpine Hardware for Harbor Foods' invoice. The desk answers "not found", the same as a missing invoice, so it never leaks that the invoice exists. An unknown sender waits for a person to bind it, and nothing is read until then.
 
 **5. Make it yours: one correction (2 minutes).** In chat: "Never give exact stock numbers. Say in stock, limited or out of stock."
 
 - The desk proposes a change to the policy file as a hub change card. Approve it as the manager.
-- "Rerun CD-000013." The reply now says the item is limited, with no count.
+- "Rerun CD-000013." The reply now says the bolts are in stock, with no count.
 - Say: "That rule is in your policy file, in Git, not in someone's head. Restart the hub and it still holds."
 
 **6. Sending, if they ask (1 minute).** "Today every reply is a draft. When you are ready, one setting lets a person approve the exact reply and the desk sends it. Only the person who asked can approve it, and only after rechecking ERPNext."

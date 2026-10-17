@@ -36,14 +36,14 @@ Twenty cases for Synthetic Meridian Distribution, all labelled synthetic:
 
 | Requests | Kind | What the desk does |
 |---|---|---|
-| 6 | order status | answers from the order, one late order opens a delivery ticket, one order of another customer reads as not found |
-| 4 | invoice copy | attaches the ERPNext print |
+| 6 | order status | answers from the order: three on track, one late order opens a delivery ticket, one draft order is not confirmed yet, one order was cancelled |
+| 4 | invoice copy | attaches the ERPNext print, one found from the customer's own order number |
 | 2 | statement | lists open invoices with a CSV |
-| 3 | price and availability | answers price and stock band, one asks which of two items |
+| 3 | price and availability | the customer's contract price, an item out of stock in the main warehouse, a disabled item not quoted |
 | 2 | delivery change | one proposal for the delivery team, one explained as already delivered |
-| 3 | complaint | tickets, one refund outside policy waits for the exception team |
+| 3 | complaint | tickets, one refund above the policy amount waits for the exception team |
 
-The exact expected outcome per request is `evals/expected/customer-desk-20.json`.
+The exact expected outcome per request is `evals/expected/customer-desk-20.json`. For the six adversarial messages, run `.venv/bin/python desk sample load --adversarial --wait 900`.
 
 ## Time it
 

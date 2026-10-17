@@ -10,9 +10,11 @@ Bindings are personal data, so they live in the desk's store, never in Git.
 
 ```
 company,channel_kind,sender,customer_id,source_ref
-Synthetic Meridian Distribution,email,buyer.one@synthetic-harbor.example,SYN-CUST-001,erp-contact:SYN-CONT-0001
-Synthetic Meridian Distribution,whatsapp,+15550100102,SYN-CUST-002,erp-contact:SYN-CONT-0003
+Synthetic Meridian Distribution,email,purchasing@harbor-foods.example,SYN-CUST-001,erp-contact:SYN-CONT-0001
+Synthetic Meridian Distribution,whatsapp,+12025550102,SYN-CUST-002,erp-contact:SYN-CONT-0002
 ```
+
+The desk also reads the shared format of the ERP module's datasets, `company,channel_kind,sender,party_type,party_id,source_ref`, as the sample does. Rows whose `party_type` is not `Customer` (supplier contacts, which belong to the Order & Invoice Desk) are listed as rejected and never imported.
 
 `channel_kind` is `email`, `whatsapp` or `helpdesk`. Email domains are lowercased and IDNA encoded, local parts kept as written. Phone numbers are E.164. A helpdesk contact also matches the email bindings for the same address.
 

@@ -40,7 +40,7 @@ Every case also has a page in the artifact viewer with the same content. Only pe
    - **Helpdesk**: the unsent draft is already on the ticket. Edit and send it in the helpdesk.
    - **Approve mode**: ask to send. Open the Work items page, read exactly what will be sent and to whom, and approve or deny. Only you, the person who asked, can approve. An administrator cannot approve for you. Nothing leaves if, by the time you approve, you no longer hold the case or the desk operator role, the sender's binding changed, ERPNext changed, or the policy or reply style changed. The desk then drafts a new revision.
 4. **Rerun** with an instruction ("mention the bank holiday") to get a new revision. The instruction cannot change the customer, the tools or the policy.
-5. **Internal cases**: for a phone call, "SYN-CUST-002 called for a copy of invoice SYN-SINV-0004". The reply is for you to deliver. It is never sent.
+5. **Internal cases**: for a phone call, "SYN-CUST-004 called for a copy of invoice ACC-SINV-2000-00004". The reply is for you to deliver. It is never sent.
 
 ## States you will see
 

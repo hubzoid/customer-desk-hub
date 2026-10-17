@@ -64,21 +64,25 @@ Open the web app at http://127.0.0.1:8721 and ask: "What is waiting on the desk?
 
 What you should see, on labelled synthetic data for Synthetic Meridian Distribution:
 
-- six order status answers, one of them a late order with a delivery ticket, one an order that belongs to another customer answered as not found
-- four invoice copies with the ERPNext print attached
+- six order status answers: three orders on track, one late order with a delivery ticket, one order still a draft and so not confirmed, one cancelled order
+- four invoice copies with the ERPNext print attached, one found from the customer's own order number
 - two open-invoice statements
-- three price and availability answers, one asking which of two similar items the customer means
+- three price and availability answers: a customer's contract price, an item out of stock in the main warehouse, and a disabled item the desk will not quote
 - two delivery changes: one proposal for the delivery team, one explained as already delivered
-- three complaints logged as tickets, one waiting for the exception team to decide a refund outside policy
+- three complaints logged as tickets, one refund above the policy amount waiting for the exception team to decide
 
 Every case shows its facts with the ERPNext record and field they came from, the policy rules it used, all ten checks and the reviewer's verdict. Nothing is sent.
+
+`desk sample load --adversarial` loads six harder messages from the same dataset: an unknown sender, which waits for a binding before anything is read, a request for another customer's invoice, which reads as not found, two attempts to give the desk instructions, which it ignores and flags, a statement for every year since 1990, and a question resent on a new thread.
+
+The sample data is the `distributor-v1` dataset of the Order & Invoice Desk's ERP module, which this hub carries as an exact copy of its read parts (see [ARCHITECTURE.md](ARCHITECTURE.md#erpnext)).
 
 ## Make it yours
 
 - **Your policy**: edit `knowledge/desk-policy.md`. The settings at the top are enforced in code, the numbered rules are cited by the desk. `./desk policy validate` lists every problem with its line and the settings your file leaves to defaults. See [docs/policy-authoring.md](docs/policy-authoring.md).
 - **Your reply style**: edit `knowledge/customer-messages.md`, with three to five of your best past replies and an approved template per outcome.
 - **A correction**: in chat, "Never give customers exact stock numbers. Say in stock, limited or out of stock, with limited meaning fewer than 20 units." The desk proposes the policy change as a reviewed hub change. Apply it, rerun a case, and the next reply follows it, also after a restart.
-- **Your ERPNext**: set `connectors/erpnext.yaml` to `backend: frappe_rest` with a read-only API key. See [docs/erp-permissions.md](docs/erp-permissions.md).
+- **Your ERPNext**: set `connectors/erpnext.yaml` to `backend: frappe_rest` with a read-only API key, then apply it with `./desk erp-configure`. See [docs/erp-permissions.md](docs/erp-permissions.md).
 - **Your helpdesk**: [docs/helpdesk-zoho.md](docs/helpdesk-zoho.md).
 - **Your senders**: import who speaks for which customer with `./desk bindings import --file contacts.csv --dry-run`. See [docs/bindings.md](docs/bindings.md).
 
@@ -88,7 +92,7 @@ Roles are granted per person in Settings, Agents, this agent, Access: desk opera
 
 ## Evals
 
-`python tests/customer_eval.py --runtime claude-local --runs 4` runs twenty requests, twelve multi-turn conversations and six safety cases, each in a fresh copy of the hub, and reports pass^1 to pass^4. The method follows Sierra's tau-bench: graded on the final state and the facts delivered, repeated to measure consistency. These are release gates on synthetic data, not a measure of quality on your data. See [docs/evals.md](docs/evals.md).
+`python tests/customer_eval.py --runtime claude-local --runs 4` runs the twenty requests, the dataset's six adversarial messages, twelve multi-turn conversations and six safety cases, each in a fresh copy of the hub, and reports pass^1 to pass^4. The method follows Sierra's tau-bench: graded on the final state and the facts delivered, repeated to measure consistency. These are release gates on synthetic data, not a measure of quality on your data. See [docs/evals.md](docs/evals.md).
 
 ## More
 
