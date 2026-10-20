@@ -210,6 +210,19 @@ def page_readers(hub_dir: Path, hub_name: str) -> list[str]:
     return [s for s in subjects if any(gs.can(s, hub_name, role) for role in PAGE_ROLES)]
 
 
+def _page_hub(hub_dir: Path) -> str:
+    from hubzoid import hub
+    from hubzoid.access import normalize
+    from hubzoid.assertions import hub_key
+
+    try:
+        # runtime.init permits a deployment-provided hub_name; artifact.publish
+        # normalizes this exact context identity, so upkeep must use it too.
+        return normalize(hub.name)
+    except RuntimeError:
+        return hub_key(hub_dir)  # trusted-host maintenance outside a workflow
+
+
 def publish_case_page(hub_dir: Path, case_id: str) -> dict | None:
     """The case as one page in Hubzoid's artifact viewer, one link per case
     that always shows the newest revision, readable only by desk role holders.
@@ -225,7 +238,7 @@ def publish_case_page(hub_dir: Path, case_id: str) -> dict | None:
     number = view["case"]["number"]
     path = Path(hub.run_dir) / f"case-{number}.html"
     path.write_text(casepage.render(view))
-    readers = page_readers(hub_dir, hub.name)
+    readers = page_readers(hub_dir, _page_hub(hub_dir))
     # Returning to a previous ACL must create a fresh copy after its old copy
     # was retired. Include the successful publication generation in the digest.
     generation = int(view["case"].get("page_generation") or 0)
@@ -240,6 +253,9 @@ def publish_case_page(hub_dir: Path, case_id: str) -> dict | None:
         _prune_older_pages(hub_dir, page)
     except Exception as exc:  # noqa: BLE001 - the page is a view; the case itself is saved
         with store.tx(hub_dir) as conn:
+            # A failed page work item is completed too. Advance its next key so
+            # the upkeep tick retries publication instead of reusing failure.
+            conn.execute("UPDATE cases SET page_generation=page_generation+1 WHERE id=?", (case_id,))
             store.audit(conn, "desk", "case_page_failed", case_id, {"error": type(exc).__name__,
                                                                     "message": str(exc)[:300]})
         return {"error": type(exc).__name__, "message": str(exc)[:300]}
@@ -276,15 +292,13 @@ def refresh_pages_if_readers_changed(hub_dir: Path, start, *, limit: int = 100) 
     (run every minute by desk_upkeep). Each refresh is a small triage work item,
     so the page stays in its own workflow's series."""
     conn = store.connect(hub_dir)
-    from hubzoid.assertions import hub_key
-
-    hub_name = hub_key(hub_dir)
+    hub_name = _page_hub(hub_dir)
     readers = ",".join(page_readers(hub_dir, hub_name))
     # Immediately retire every stale case copy, including copies beyond this
     # tick's work budget. New pages are published under the upkeep identity.
     # This avoids an old artifact owner retaining a revoked desk role's data.
     stale = store.rows(conn.execute("SELECT id, number, page_generation FROM cases WHERE page_url IS NOT NULL "
-                                   "AND (page_readers IS NULL OR page_readers != ?) ORDER BY updated DESC", (readers,)))
+                                   "AND (page_readers IS NULL OR page_readers != ?) ORDER BY page_generation, updated", (readers,)))
     if not stale:
         return 0
     from sqlalchemy import bindparam, text
@@ -462,7 +476,7 @@ def helpdesk_draft(hub_dir: Path, values: dict, case: dict, reply: dict) -> str:
     channel = values["DESK_HELPDESK"]
     mode = wi_config.mode_for(wi_config.load(hub_dir), ["customer_reply.send"], channel)
     if mode != "draft":
-        return f"not written: customer_reply.send is {mode} for zoho_desk, and the helpdesk takes drafts only"
+        return f"not written: customer_reply.send is {mode} for {channel}, and the helpdesk takes drafts only"
     pl = replies.payload(hub_dir, case, reply)
     try:
         result = hub.operation.run(name="customer_reply", target={"case": case["number"], "reply": reply["revision"]},
@@ -478,10 +492,11 @@ def helpdesk_draft(hub_dir: Path, values: dict, case: dict, reply: dict) -> str:
 
     def settle():
         with store.tx(hub_dir) as conn:
-            if result.get("state") in ("awaiting_provider_editor", "awaiting_provider_confirmation"):
+            if result.get("state") or channel == "freshdesk":
+                state = _editor_result_state(result)
                 store.upsert_send(conn, case["id"], reply["revision"], "draft", synthetic=case["synthetic"],
-                                  status=result["state"], receipt=result, requested_by="desk")
-                store.update_case(conn, case["id"], state=result["state"])
+                                  status=state, receipt=result, requested_by="desk")
+                store.update_case(conn, case["id"], state=state)
                 return result
             store.upsert_send(conn, case["id"], reply["revision"], "draft", synthetic=case["synthetic"],
                               provider_draft_id=result.get("provider_draft_id"), status="draft_saved",
@@ -646,15 +661,23 @@ def _stale(hub_dir, case, reply, requester, stale):
     return out
 
 
+def _editor_result_state(result):
+    from .helpdesk.editor import EDITOR_STATES
+
+    state = result.get("state")
+    return ("provider_delivery_uncertain" if state == "placing" or state not in EDITOR_STATES else state)
+
+
 def _settled(hub_dir, case, reply, action, result, requester):
     with store.tx(hub_dir) as conn:
         c = store.get_case(conn, case["id"])
         if action == "draft":
-            if result.get("state") in ("awaiting_provider_editor", "awaiting_provider_confirmation"):
-                store.update_case(conn, case["id"], state=result["state"])
+            if result.get("state") or c["channel_id"] == "freshdesk":
+                state = _editor_result_state(result)
+                store.update_case(conn, case["id"], state=state)
                 store.upsert_send(conn, case["id"], reply["revision"], "draft", synthetic=case["synthetic"],
-                                  status=result["state"], receipt=result, requested_by=requester)
-                return {"state": result["state"], "receipt": result}
+                                  status=state, receipt=result, requested_by=requester)
+                return {"state": state, "receipt": result}
             state = "helpdesk_draft_saved" if c["channel_id"] in ("zoho_desk", "freshdesk") else "mailbox_draft_saved"
             store.upsert_send(conn, case["id"], reply["revision"], "draft", synthetic=case["synthetic"],
                               provider_draft_id=result.get("provider_draft_id") or result.get("receipt_id"),

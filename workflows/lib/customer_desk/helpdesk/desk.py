@@ -51,14 +51,14 @@ def readers(hub_dir: Path, values: dict, *, transport=None) -> tuple[zoho.Reader
 
 
 def latest_inbound(threads: list[dict]) -> dict | None:
-    real = [t for t in threads if t.get("direction") == "in" and t.get("status") != "DRAFT"]
+    real = [t for t in threads if t.get("direction") == "in" and t.get("status") != "DRAFT" and not t.get("private")]
     real = [t for t in real if not any(a in (t.get("summary") or "").lower() for a in AUTO_ACK)]
     return max(real, key=lambda t: (t.get("createdTime") or "", int(t["id"]) if str(t.get("id", "")).isdigit() else 0)) \
         if real else None
 
 
 def awaiting_reply(threads: list[dict]) -> bool:
-    sent = [t for t in threads if t.get("status") != "DRAFT"]
+    sent = [t for t in threads if t.get("status") != "DRAFT" and not t.get("private")]
     if not sent:
         return False
     last = max(sent, key=lambda t: (t.get("createdTime") or "", int(t["id"]) if str(t.get("id", "")).isdigit() else 0))

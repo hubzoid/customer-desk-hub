@@ -161,8 +161,12 @@ def zoho_draft(hub_dir: Path, values: dict, case: dict, reply: dict, *, transpor
             raise NotSent("helpdesk_drafts_off: drafts need DESK_HELPDESK_MODE live and DESK_HELPDESK_DRAFTS true.")
         if values.get("DESK_HELPDESK") == "freshdesk":
             from .helpdesk import editor
+            from .actions import ActionError
 
-            return editor.prepare(hub_dir, case, reply, reader)
+            try:
+                return editor.prepare(hub_dir, case, reply, reader)
+            except ActionError as exc:
+                raise Rejected(f"{exc.code}: {exc.message}") from None
         ticket_id = case["helpdesk_ticket_id"]
         conn = store.connect(hub_dir)
         inbound = conn.execute("SELECT latest_inbound_id FROM helpdesk_tickets WHERE ticket_id=?",

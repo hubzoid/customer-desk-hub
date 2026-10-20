@@ -220,8 +220,10 @@ class Reader(_Base):
     def search_resolved(self, term: str, *, department_id: str) -> list[dict]:
         if not re.fullmatch(r"[a-z]{3,30}", term):
             raise ValueError("Unsafe search term")
-        body = self._request("GET", "/tickets/search", params={"_all": f"*{term}*", "status": "Closed,Resolved",
-                "departmentId": department_id, "limit": 30, "sortBy": "-modifiedTime"}) or {}
+        # Status labels are tenant-defined. Check canonical statusType on the
+        # returned and reread ticket instead of assuming English labels here.
+        body = self._request("GET", "/tickets/search", params={"_all": f"*{term}*",
+                "departmentId": department_id, "limit": 30}) or {}
         return body.get("data") or []
 
     def threads(self, ticket_id: str) -> list[dict]:

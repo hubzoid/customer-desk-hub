@@ -6,8 +6,8 @@ new copy replaces this folder and this file.
 
 | | |
 |---|---|
-| Canonical module | `hubzoid/order-invoice-desk-hub:erp/` (`erp.CANONICAL`) |
-| Source commit | `4c37c7013f5299c58a3eba746b31b68f6ca055a7` |
+| Canonical module | `hubzoid/order-desk-hub:erp/` (`erp.CANONICAL` retains the legacy module name) |
+| Source commit | `a3c3993135ebffa2c291dac3a7780be46f7bf796` |
 | Copied on | 20 Oct 2026 |
 | Left out | `write.py`, `digest.py`, `bootstrap.py`: the write contract. The Customer Desk never writes to ERPNext and mounts no ERP write tool |
 
@@ -16,7 +16,7 @@ which refuses `writes_enabled: true` and always passes a customer `party_scope`.
 `tests/test_vendored_erp.py` checks every byte against the table below and every
 dataset file against `datasets/distributor-v1/manifest.json`.
 
-Coordinated canonical update: `service.py` and `config.py` include the 20 October build's SDK data-root and first-initialization fixes from the Order Desk worktree. The base source commit remains above until the coordinating parent records the canonical reviewed commit. No write contract was copied.
+Coordinated canonical update: `service.py` and `config.py` include the 20 October build's SDK data-root and first-initialization fixes from the Order Desk worktree. `service.py` also rejects a configured data root while legacy ERP state still exists, before allocating a new deployment identity. The exact canonical commit is recorded above; it includes the initial reviewed implementation and the necessary identity guard author fix. No write contract was copied.
 
 ## Files
 
@@ -125,4 +125,4 @@ Coordinated canonical update: `service.py` and `config.py` include the 20 Octobe
 | `models.py` | `sha256:12e0bb6285da59328f48dcab9171cee8dc559711b6710c6ffbc25c149c0785bb` |
 | `read.py` | `sha256:bdbc10715073da53bf4cf42a67831a96f9c3db330a37ab3685a836306dbb751c` |
 | `resources.py` | `sha256:bbb28fdad6826d3c4d3d6febcfef631fd09af8a3ade1421752b5ca0527d5bb3b` |
-| `service.py` | `sha256:0da159228d530234e71fa4993fb54e0ba6223eeec46d6f819d427f7cef6f7562` |
+| `service.py` | `sha256:410cde848b0ff6866526b0eb9b6174b53e423f3399512ed5b517b7c494f1bb01` |

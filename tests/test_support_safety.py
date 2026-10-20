@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, text
 
-from customer_desk import config, flows, store
+from customer_desk import config, flows, recheck, store
 from customer_desk.helpdesk import retrieval
 from test_support import configure, open_support
 
@@ -69,13 +69,20 @@ def test_acl_grant_revoke_restore_republishes_with_fresh_generation(hub, monkeyp
         db.execute(text("INSERT INTO hz_artifacts VALUES('unrelated','another-hub',:key,NULL)"),
                    {"key": f"case-{opened['number'].lower()}"})
     monkeypatch.setattr(artifacts, "_engine", lambda _: engine)
-    monkeypatch.setattr(assertions, "hub_key", lambda _: "canonical-desk")
+    monkeypatch.setattr(assertions, "hub_key", lambda _: "different-folder-key")
     readers = ["owner@example.test"]
-    monkeypatch.setattr(flows, "page_readers", lambda *a: list(readers))
+    def current_readers(_hub_dir, name):
+        assert name == "canonical-desk"  # actual runtime identity wins over folder key
+        return list(readers)
+    monkeypatch.setattr(flows, "page_readers", current_readers)
     monkeypatch.setattr(flows, "_prune_older_pages", lambda *a: None)
     digests = []
+    fail_next = []
 
     def publish(_path, **kw):
+        if fail_next:
+            fail_next.pop()
+            raise RuntimeError("synthetic publication outage")
         digests.append(kw["digest"])
         ident = f"page-{len(digests)}"
         with engine.begin() as db:
@@ -95,6 +102,11 @@ def test_acl_grant_revoke_restore_republishes_with_fresh_generation(hub, monkeyp
             completed.add(kw["key"])
         return {"id": kw["key"]}
 
+    readers.append("teammate@example.test")
+    fail_next.append(True)
+    assert flows.refresh_pages_if_readers_changed(hub, start) == 1
+    with engine.connect() as db:
+        assert db.execute(text("SELECT COUNT(*) FROM hz_artifacts WHERE hub='canonical-desk' AND deleted IS NULL")).scalar() == 0
     for desired in (["owner@example.test", "teammate@example.test"],
                     ["owner@example.test"],
                     ["owner@example.test", "teammate@example.test"]):
@@ -104,18 +116,22 @@ def test_acl_grant_revoke_restore_republishes_with_fresh_generation(hub, monkeyp
             live = db.execute(text("SELECT id FROM hz_artifacts WHERE hub='canonical-desk' AND deleted IS NULL")).all()
             assert live == [(f"page-{len(digests)}",)]
             assert db.execute(text("SELECT deleted FROM hz_artifacts WHERE id='unrelated'")).scalar() is None
-    assert len(completed) == 3 and len(set(digests)) == 4
+    assert len(completed) == 4 and len(set(digests)) == 4
     with store.tx(hub) as conn:
         row = conn.execute("SELECT page_readers,page_generation FROM cases WHERE id=?", (case_id,)).fetchone()
-    assert row["page_readers"] == ",".join(readers) and row["page_generation"] == 4
+    assert row["page_readers"] == ",".join(readers) and row["page_generation"] == 5
 
 
 class History:
     def search_resolved(self, term, *, department_id):
-        return [{"id": "2", "departmentId": "7", "statusType": "resolved", "subject": "Export reports",
-                 "contact": {"firstName": "Private Name"}},
+        return [{"id": "2", "departmentId": "7", "statusType": "resolved", "subject": "Export reports"},
                 {"id": "3", "departmentId": "8", "statusType": "resolved", "subject": "Export reports"},
                 {"id": "4", "departmentId": "7", "statusType": "open", "subject": "Export reports"}]
+
+    def ticket(self, ticket_id):
+        assert ticket_id == "2"
+        return {"id": "2", "departmentId": "7", "statusType": "resolved",
+                "contact": {"firstName": "Private Name", "email": "private@example.test"}}
 
     def all_threads(self, ticket_id):
         assert ticket_id == "2"
@@ -134,6 +150,34 @@ def test_resolved_retrieval_enforces_department_human_sent_and_masks_names(hub):
     answer = got["answers"][0]
     assert answer["ref"] == "resolved:2:a" and answer["source_time"] == "2026-10-19"
     assert "Private Name" not in answer["text"] and "Private Operator" not in answer["text"]
+
+
+def test_precedent_recheck_uses_identical_contact_masking(hub, monkeypatch):
+    from customer_desk.helpdesk import desk
+
+    configure(hub, DESK_HELPDESK="freshdesk", FRESHDESK_GROUP_ID="7")
+    reader = History()
+    answer = retrieval.similar_resolved(reader, {"id": "1", "departmentId": "7"}, "export report",
+                                         config.settings(hub))["answers"][0]
+    monkeypatch.setattr(desk, "readers", lambda *a: (reader, None))
+    fact = {"fact_id": "S1", "source": {"backend": "support", **answer}}
+    assert recheck.changed_facts(hub, {}, [fact]) == []
+    monkeypatch.setattr(reader, "thread", lambda *a: {"plainText": "The answer has changed to different instructions."})
+    assert recheck.changed_facts(hub, {}, [fact])[0]["now"] == "historical source unavailable/changed"
+
+
+@pytest.mark.parametrize("change", [{"departmentId": "8"}, {"statusType": "open"},
+                                   {"productId": "different"}, {"language": "fr"}])
+def test_resolved_source_reread_rejects_stale_search_scope(hub, change):
+    configure(hub, DESK_HELPDESK="freshdesk", FRESHDESK_GROUP_ID="7")
+    class Moved(History):
+        def ticket(self, ticket_id):
+            return {**super().ticket(ticket_id), "productId": "p", **change}
+        def search_resolved(self, *a, **kw):
+            return [{**r, "productId": "p"} for r in super().search_resolved(*a, **kw)]
+    got = retrieval.similar_resolved(Moved(), {"id": "1", "departmentId": "7", "productId": "p"},
+                                     "export report", config.settings(hub))
+    assert got["answers"] == []
 
 
 def test_failed_history_search_is_distinct_from_no_match(hub):
@@ -176,3 +220,28 @@ def test_concurrent_first_erp_initialization_reads_one_revision(hub):
         results = list(pool.map(first_read, range(4)))
     assert len({identity for identity, _ in results}) == 1
     assert {revision for _, revision in results} == {1}
+
+
+def test_custom_data_root_requires_migrating_legacy_erp_identity(hub, tmp_path, monkeypatch):
+    import shutil
+
+    from erp.errors import ERPError
+    from erp.service import ERPService
+
+    original = ERPService.for_hub(hub)
+    old_identity = original.deployment_id
+    legacy = hub / ".hubzoid/data/erp"
+    identity_bytes = (legacy / "deployment-id").read_bytes()
+    data_root = tmp_path / "customer-runtime"
+    target = data_root / ".hubzoid/data/erp"
+    monkeypatch.setenv("HUBZOID_DATA_DIR", str(data_root))
+    with pytest.raises(ERPError) as exc:
+        ERPService.for_hub(hub)
+    assert exc.value.code == "data_root_migration_required" and exc.value.status == 409
+    assert not target.exists()  # guard runs before allocating a new identity
+    assert (legacy / "deployment-id").read_bytes() == identity_bytes
+    target.parent.mkdir(parents=True)
+    shutil.move(str(legacy), str(target))  # reviewed migration of the entire existing store
+    restored = ERPService.for_hub(hub)
+    assert restored.deployment_id == old_identity
+    assert (target / "deployment-id").read_bytes() == identity_bytes

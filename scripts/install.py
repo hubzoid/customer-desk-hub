@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ["scripts", "freshdesk-app", "AGENTS.md", "settings.yaml", "hub.settings.yaml", "hub.manifest.yaml", "work-items.yaml", "hitl.yaml",
+FILES = ["scripts", "skills", "freshdesk-app", "AGENTS.md", "settings.yaml", "hub.settings.yaml", "hub.manifest.yaml", "work-items.yaml", "hitl.yaml",
          "mcp-apps.yaml", "desk", "knowledge", "agents", "workflows", "tools_local", "restricted", "connectors",
          "cards", "identity", "doctor", "evals", ".claude", "channels", "docs", "requirements.txt", "requirements-sdk.txt", "ARCHITECTURE.md", "LICENSE", "NOTICE", "README.md"]
 

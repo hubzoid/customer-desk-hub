@@ -28,4 +28,8 @@ Test general support, live-fact fallback, category safety, citations/PII, provid
 - Full offline hub suite, including real local workflow-engine cases: 121 passed, no skips, 110.79 seconds (`pytest -m ""`). No live models/providers were invoked.
 - Final ACL grant/revoke/restore and legacy polling checks: 4 passed, 24 deselected, 1.39 seconds. The added ACL-cycle case was run after the broader suite.
 - Hub doctor: `ok: true`; sample checks pass and missing operator grants are explicitly warned. This does not establish a connected support provider. JavaScript syntax checks pass for the native app and OAuth callback.
-- Independent Claude Opus 5.5 review will be bound to the implementation commit; author dispositions and any focused rerun follow below.
+- Independent Claude Opus 5.5 reviewed implementation commit `e98b7a1`. Necessary-fix dispositions are recorded in REVIEW-2026-10-20.md. The review corrections and their added regressions await the coordinating parent's sequential verification; the preceding pass counts describe the earlier build.
+
+## Final author validation
+
+Claude Opus 5.5 reviewed the entire implementation at e98b7a1. Necessary fixes and evidence dispositions are in docs/REVIEW-2026-10-20.md. Final exact-SDK-pin offline suite: 143 passed, no skips, 116.70 seconds, including local workflow-engine tests and legacy ERP identity preservation. Native app Node harness passed without a browser. Final Hub doctor reports ok; operator grants remain an explicit setup step. Canonical ERP provenance is a3c3993135ebffa2c291dac3a7780be46f7bf796 in hubzoid/order-desk-hub. No second independent approval or live qualification is claimed.

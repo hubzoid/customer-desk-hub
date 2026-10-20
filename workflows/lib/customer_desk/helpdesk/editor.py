@@ -14,13 +14,16 @@ from pathlib import Path
 from .. import actions, config, pipeline, recheck, store
 from . import desk, retrieval, zoho
 
+EDITOR_STATES = frozenset(("awaiting_provider_editor", "placing", "awaiting_provider_confirmation", "requires_manual_attachment"))
+
 
 def link(hub_dir: Path, actor, *, agent_id: str, principal: str, reader) -> dict:
     actions.require(actor, "manage_access")
     agent = reader.agent(agent_id)
     email = ((agent.get("contact") or {}).get("email") or agent.get("email") or "").lower()
     principal = principal.strip().lower()
-    if not email or email != principal or agent.get("deleted") or agent.get("active") is False:
+    if (not email or email != principal or agent.get("deleted") or agent.get("active") is False
+            or (agent.get("contact") or {}).get("active") is False):
         raise actions.ActionError("identity_mismatch", "Freshdesk agent email must match the verified Hubzoid principal", 403)
     with store.tx(hub_dir) as conn:
         conn.execute("INSERT INTO editor_links(provider,agent_id,principal,state,verified_by,verified_at) VALUES "
@@ -67,7 +70,7 @@ def prepare(hub_dir: Path, case: dict, reply: dict, reader) -> dict:
 
 
 def payload(hub_dir: Path, actor, *, ticket_id: str, agent_id: str, reader, placed_digest: str | None = None,
-            claim: bool = False, placement_token: str | None = None) -> dict:
+            claim: bool = False, placement_token: str | None = None, expected_digest: str | None = None) -> dict:
     actions.require(actor, "desk_editor")
     actions.require(actor, "desk_operator")
     values = config.settings(hub_dir)
@@ -85,7 +88,8 @@ def payload(hub_dir: Path, actor, *, ticket_id: str, agent_id: str, reader, plac
         raise actions.ActionError("identity_unlinked", "An administrator must verify your Freshdesk account link", 403)
     agent = reader.agent(agent_id)
     email = ((agent.get("contact") or {}).get("email") or agent.get("email") or "").lower()
-    if email != actor.email or agent.get("deleted") or agent.get("active") is False:
+    if (email != actor.email or agent.get("deleted") or agent.get("active") is False
+            or (agent.get("contact") or {}).get("active") is False):
         raise actions.ActionError("identity_revoked", "Freshdesk agent identity is no longer active", 403)
     ticket = reader.ticket(ticket_id)
     if not retrieval.permitted(ticket, values):
@@ -107,6 +111,8 @@ def payload(hub_dir: Path, actor, *, ticket_id: str, agent_id: str, reader, plac
     reply = store.get_reply(conn, case["id"], case["current_reply"])
     if not reply["checks"].get("passed") or reply["state"] in ("superseded", "rejected"):
         raise actions.ActionError("reply_stale", "Reply is not safe/current")
+    if claim and expected_digest != reply["digest"]:
+        raise actions.ActionError("reply_stale", "Suggestion changed since confirmation. Show it again before replacement")
     resolution = store.get_resolution(conn, case["id"], reply["resolution"])
     loaded = pipeline.load(hub_dir)
     if any(resolution[k + "_digest"] != loaded.digests()[k] for k in ("policy", "style", "kinds")):
@@ -140,6 +146,9 @@ def payload(hub_dir: Path, actor, *, ticket_id: str, agent_id: str, reader, plac
     if claim:
         token = secrets.token_urlsafe(32)
         with store.tx(hub_dir) as tconn:
+            current = store.get_case(tconn, case["id"])
+            if current["current_reply"] != reply["revision"]:
+                raise actions.ActionError("reply_stale", "Reply changed before editor placement")
             changed = tconn.execute("UPDATE editor_deliveries SET state='placing',placed_by=?,claim_hash=?,updated=? "
                 "WHERE case_id=? AND reply_revision=? AND state='awaiting_provider_editor'",
                 (actor.email, hashlib.sha256(token.encode()).hexdigest(), time.time(), case["id"], reply["revision"])).rowcount

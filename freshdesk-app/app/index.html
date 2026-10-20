@@ -1,1 +1,11 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Customer Desk</title><style>body{font:14px system-ui;margin:12px;color:#20252b}button{display:block;margin:10px 0;padding:8px}textarea{width:100%;min-height:180px;box-sizing:border-box}#status{white-space:pre-wrap}small{color:#586170}</style></head><body><h2>Customer Desk</h2><p id="status" role="status">Connect your Hubzoid account to view a scoped suggestion.</p><button id="connect">Sign in to Hubzoid</button><button id="load" disabled>Show current suggestion</button><textarea id="suggestion" readonly aria-label="Current checked suggestion"></textarea><div id="attachments"></div><button id="insert" disabled>Replace editor with this suggestion</button><small>No reply is sent. Replacing editor text requires your confirmation. Placement does not verify saved-draft persistence.</small><script src="{{{appclient}}}"></script><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Customer Desk</title>
+<style>body{font:14px system-ui;margin:12px;color:#20252b}button{display:block;margin:10px 0;padding:8px}textarea{width:100%;min-height:180px;box-sizing:border-box}#status{white-space:pre-wrap}small{color:#586170}#confirm-panel{border:1px solid #975600;padding:10px}</style></head>
+<body><h2>Customer Desk</h2><p id="status" role="status">Connect your Hubzoid account to view a scoped suggestion.</p>
+<button id="connect">Sign in to Hubzoid</button><button id="load" disabled>Show current suggestion</button>
+<textarea id="suggestion" readonly aria-label="Current checked suggestion"></textarea><div id="attachments"></div>
+<button id="insert" disabled>Replace editor with this suggestion</button>
+<section id="confirm-panel" hidden aria-label="Confirm editor replacement"><p id="confirm-warning"></p>
+<button id="confirm-insert">Confirm replacement</button><button id="cancel-insert">Cancel and preserve editor text</button></section>
+<small>No reply is sent. Replacing editor text requires your confirmation. Placement does not verify saved-draft persistence.</small>
+<script src="{{{appclient}}}"></script><script src="app.js"></script></body></html>

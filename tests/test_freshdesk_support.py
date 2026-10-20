@@ -6,7 +6,7 @@ import json
 import httpx
 import pytest
 
-from customer_desk import actions, config, pipeline, store
+from customer_desk import actions, config, flows, pipeline, replies, store
 from customer_desk.helpdesk import desk, editor, freshdesk, retrieval, zoho
 from test_support import SupportRunner, configure, open_support
 
@@ -42,7 +42,10 @@ class Provider:
             self.ticket["tags"] = body["tags"]
             return httpx.Response(200, json=self.ticket)
         if request.method == "POST" and path == "/tickets/42/notes":
-            return httpx.Response(201, json={"id": 2, **body})
+            note = {"id": len(self.conversations) + 2, **body, "incoming": False,
+                    "created_at": "2026-10-20T11:00:00Z"}
+            self.conversations.append(note)
+            return httpx.Response(201, json=note)
         return httpx.Response(404, json={"description": "No such qualified endpoint"})
 
 
@@ -94,6 +97,67 @@ def test_native_freshdesk_facets_and_initial_description(hub, provider):
     assert sum(path == "/search/tickets" for _, path, _ in provider[0].calls) == 1
 
 
+def test_live_intake_writeback_note_keeps_editor_available(hub, provider, monkeypatch):
+    from types import SimpleNamespace
+    import hubzoid
+
+    source, reader, transport = provider
+    # Real intake adapter, triage, writeback and editor service, with only SDK
+    # checkpoint/operation dispatch performed inline (no engine/model/network).
+    writer = freshdesk.Writer(hub, config.settings(hub), transport=transport)
+    monkeypatch.setattr(desk, "readers", lambda *a, **kw: (reader, writer))
+    def operation(**kw):
+        fn = kw["draft"] if kw["name"] == "customer_reply" else kw["dispatch"]
+        return fn(kw["arguments"])
+    monkeypatch.setattr(hubzoid, "hub", SimpleNamespace(
+        work_item=SimpleNamespace(id="live-intake", checkpoint=lambda _name, fn: fn()),
+        operation=SimpleNamespace(run=operation)))
+    opened = flows.helpdesk_intake(hub, config.settings(hub), "42")
+    assert opened
+    pipeline.triage(hub, opened["case_id"], SupportRunner())
+    case = store.get_case(store.connect(hub), opened["case_id"])
+    out = flows.helpdesk_writeback(hub, config.settings(hub), case)
+    assert out["note"] == "written" and out["draft"] == "awaiting_provider_editor"
+    assert source.conversations[-1]["private"] is True
+    assert desk.awaiting_reply(desk.read_ticket(reader, "42")["threads"])
+    actor = actions.Actor("operator@example.test", lambda _: True)
+    editor.link(hub, actor, agent_id="9", principal=actor.email, reader=reader)
+    assert editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader)["body"]
+
+
+@pytest.mark.parametrize("state", sorted(editor.EDITOR_STATES) + [None, "unexpected"])
+def test_freshdesk_delivery_states_never_settle_as_saved(hub, provider, state, monkeypatch):
+    from types import SimpleNamespace
+    import hubzoid
+
+    _, reader, _ = provider
+    case, reply = ready(hub, reader)
+    result = {"state": state} if state else {}
+    monkeypatch.setattr(hubzoid, "hub", SimpleNamespace(
+        work_item=SimpleNamespace(checkpoint=lambda _name, fn: fn()),
+        operation=SimpleNamespace(run=lambda **kw: result)))
+    flows.helpdesk_draft(hub, config.settings(hub), case, reply)
+    out = flows._settled(hub, case, reply, "draft", result, "operator@example.test")
+    conn = store.connect(hub)
+    assert out["state"] != "helpdesk_draft_saved"
+    assert store.get_reply(conn, case["id"], reply["revision"])["state"] == "ready"
+    assert conn.execute("SELECT status FROM sends WHERE case_id=?", (case["id"],)).fetchone()["status"] != "draft_saved"
+
+
+def test_freshdesk_prepare_refusal_is_rejected_not_uncertain(hub, provider, monkeypatch):
+    from hubzoid.work_items import Rejected
+
+    _, reader, transport = provider
+    case, reply = ready(hub, reader)
+    writer = freshdesk.Writer(hub, config.settings(hub), transport=transport)
+    monkeypatch.setattr(desk, "readers", lambda *a, **kw: (reader, writer))
+    def refuse(*a, **kw):
+        raise actions.ActionError("ticket_changed", "A newer message requires rerun")
+    monkeypatch.setattr(editor, "prepare", refuse)
+    with pytest.raises(Rejected, match="ticket_changed"):
+        replies.zoho_draft(hub, config.settings(hub), case, reply)({"body": reply["rendered"]})
+
+
 def test_editor_requires_link_both_grants_and_current_provider_scope(hub, provider):
     source, reader, _ = provider
     case, reply = ready(hub, reader)
@@ -121,10 +185,10 @@ def test_editor_placement_is_never_reported_persisted_or_reinserted(hub, provide
     case, reply = ready(hub, reader)
     actor = actions.Actor("operator@example.test", lambda _: True)
     editor.link(hub, actor, agent_id="9", principal=actor.email, reader=reader)
-    claimed = editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True)
+    claimed = editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True, expected_digest=reply["digest"])
     with pytest.raises(actions.ActionError, match="matching editor claim"):
         editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, placed_digest=reply["digest"])
-    busy = editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True)
+    busy = editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True, expected_digest=reply["digest"])
     assert busy["body"] is None and busy["state"] == "placing"
     ack = editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, placed_digest=reply["digest"],
                          placement_token=claimed["placement_token"])
@@ -139,7 +203,7 @@ def test_claim_survives_restart_and_revoked_claimer_cannot_ack(hub, provider):
     case, reply = ready(hub, reader)
     actor = actions.Actor("operator@example.test", lambda _: True)
     editor.link(hub, actor, agent_id="9", principal=actor.email, reader=reader)
-    claim = editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True)
+    claim = editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True, expected_digest=reply["digest"])
     store.reset_connections()
     assert editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader)["body"] is None
     with pytest.raises(actions.ActionError):
@@ -154,14 +218,14 @@ def test_concurrent_editor_clicks_have_one_claimant(hub, provider):
     from threading import Barrier
 
     _, reader, _ = provider
-    ready(hub, reader)
+    _, reply = ready(hub, reader)
     actor = actions.Actor("operator@example.test", lambda _: True)
     editor.link(hub, actor, agent_id="9", principal=actor.email, reader=reader)
     barrier = Barrier(2)
 
     def click(_):
         barrier.wait(timeout=10)
-        return editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True)
+        return editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True, expected_digest=reply["digest"])
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(click, range(2)))
@@ -191,7 +255,7 @@ def test_invoice_download_is_scoped_and_placement_requires_manual_attachment(hub
     with pytest.raises(actions.ActionError):
         editor.attachment(hub, actions.Actor(actor.email, lambda _: False), ticket_id="42", agent_id="9",
                           sha256=invoice["sha256"], reader=reader)
-    claim = editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True)
+    claim = editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True, expected_digest=reply["digest"])
     result = editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader,
                            placed_digest=reply["digest"], placement_token=claim["placement_token"])
     assert result["state"] == "requires_manual_attachment"
@@ -230,12 +294,35 @@ def test_provider_ticket_ids_do_not_collide_after_provider_switch(hub, provider)
 
 def test_editor_respects_current_action_mode_and_manual_recovery(hub, provider):
     _, reader, _ = provider
-    ready(hub, reader)
+    _, reply = ready(hub, reader)
     actor = actions.Actor("operator@example.test", lambda _: True)
     editor.link(hub, actor, agent_id="9", principal=actor.email, reader=reader)
-    editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True)
+    editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True, expected_digest=reply["digest"])
     recovered = editor.reconcile(hub, actor, ticket_id="42", decision="not_inserted")
     assert recovered["state"] == "awaiting_provider_editor" and recovered["provider_persistence"] == "unverified"
     (hub / "work-items.yaml").write_text("version: 1\nwrite_modes:\n  customer_reply.send: 'off'\n")
     with pytest.raises(actions.ActionError, match="mode"):
+        editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader)
+
+
+def test_stale_confirmation_never_claims_new_reply(hub, provider):
+    _, reader, _ = provider
+    case, reply = ready(hub, reader)
+    actor = actions.Actor("operator@example.test", lambda _: True)
+    editor.link(hub, actor, agent_id="9", principal=actor.email, reader=reader)
+    assert editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader)["digest"] == reply["digest"]
+    for expected in (None, "sha256:older-confirmation"):
+        with pytest.raises(actions.ActionError, match="since confirmation"):
+            editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader, claim=True, expected_digest=expected)
+    row = store.connect(hub).execute("SELECT * FROM editor_deliveries WHERE case_id=?", (case["id"],)).fetchone()
+    assert row["state"] == "awaiting_provider_editor" and row["claim_hash"] is None
+
+
+def test_inactive_provider_contact_revokes_payload(hub, provider):
+    source, reader, _ = provider
+    ready(hub, reader)
+    actor = actions.Actor("operator@example.test", lambda _: True)
+    editor.link(hub, actor, agent_id="9", principal=actor.email, reader=reader)
+    source.agent["contact"]["active"] = False
+    with pytest.raises(actions.ActionError, match="no longer active"):
         editor.payload(hub, actor, ticket_id="42", agent_id="9", reader=reader)

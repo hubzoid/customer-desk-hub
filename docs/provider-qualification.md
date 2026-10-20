@@ -4,6 +4,8 @@ Build checkout: base `35068825` (abbreviated). SDK inspected/used for completed 
 
 Completed before the laptop RAM restriction: 28 focused policy, binding and Zoho HTTP tests passed. The first sandboxed run had 9 loopback-bind errors, then the identical focused set passed with local synthetic-server permission. These are synthetic HTTP tests, not real-tenant/model proof. Compilation succeeded before later light edits. No further test/browser/model process is launched while the coordinating parent serializes checks.
 
+The coordinating parent subsequently ran the pre-review build: 121 full offline tests passed with no skips, then four final ACL-cycle/polling checks passed. Independent Claude Opus 5.5 reviewed commit `e98b7a1`. See REVIEW-2026-10-20.md for dispositions. Necessary review fixes passed 50 focused checks and the Node app harness, then 142 broader checks. After the final ERP mirror, 143 tests passed with no skips against the exact c4bf1dbe SDK source (116.70 s). Hub doctor reports ok with the expected missing-role warning. Initial runs used the additive f99a224 SDK checkout; the final exact-pin run closes that difference.
+
 ## Implemented scope
 
 - General support without ERP, approved scoped articles, conversation evidence and bounded resolved-answer retrieval, cited drafting and independent applicability review.
@@ -36,18 +38,19 @@ No FDK packaging, real browser/provider installation, real model, Railway or Mar
 
 The monthly proposed-improvement schedule is omitted. Explicit owner corrections and approved knowledge edits deliver the primary first/repeat-use journey. A generic non-delegable setup credential and new approval platform are deferred. The current concrete path trusts the local host owner and reuses existing SDK approvals/access. No new Cowork helper, vector store, shared package or alternate chat application is introduced.
 
-## Pending verification commands
+## Reproduce offline verification
 
-Run from this checkout, one process at a time after the parent grants a test slot:
+Run from a correctly installed checkout, one process at a time:
 
 ```sh
-/Users/shreyarao/Desktop/WaveAssist/Hubzoid/customer-desk-hub/.venv/bin/python -m pytest tests/test_support.py tests/test_freshdesk_support.py tests/test_support_safety.py -q
+python -m pytest tests/test_support.py tests/test_freshdesk_support.py tests/test_support_safety.py -q
+node tests/freshdesk_app_harness.cjs
 ```
 
 Then one full hub regression with local synthetic-server permission:
 
 ```sh
-/Users/shreyarao/Desktop/WaveAssist/Hubzoid/customer-desk-hub/.venv/bin/python -m pytest -m "" -q
+python -m pytest -m "" -q
 ```
 
 Engine/real-model tests must be inspected individually for prerequisites and actual execution. A critical skip or timeout is not a pass. The coordinating parent runs the independent Claude review and owns commits/PR handoff.

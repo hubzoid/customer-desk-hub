@@ -90,6 +90,52 @@ def test_saved_source_correction_changes_next_result_and_invalidates_old_evidenc
     assert store.get_reply(conn, case["id"], old["revision"])["state"] == "superseded"
 
 
+def test_crlf_article_revision_rechecks_exact_source_bytes(hub):
+    configure(hub)
+    article = hub / "knowledge/support/export-guide.md"
+    article.write_bytes(article.read_bytes().replace(b"\n", b"\r\n"))
+    opened = open_support(hub)
+    assert pipeline.triage(hub, opened["case_id"], SupportRunner())["checks_passed"]
+    conn = store.connect(hub)
+    case = store.get_case(conn, opened["case_id"])
+    assert not recheck.changed_facts(hub, case, store.get_facts(conn, case["id"], case["current_resolution"]))
+
+
+@pytest.mark.parametrize("kind", ["outage", "scope", "incomplete"])
+def test_current_provider_evidence_failure_holds_with_recovery_reason(hub, monkeypatch, kind):
+    from customer_desk.helpdesk import desk, zoho
+
+    configure(hub, DESK_HELPDESK="freshdesk", FRESHDESK_GROUP_ID="7")
+    class Unavailable:
+        def ticket(self, _ticket):
+            if kind == "outage":
+                raise zoho.ZohoError(503, "freshdesk_unavailable", "synthetic outage")
+            return {"id": "42", "departmentId": "8" if kind == "scope" else "7"}
+        def all_threads(self, _ticket):
+            return [], False
+    monkeypatch.setattr(desk, "readers", lambda *a: (Unavailable(), None))
+    opened = open_support(hub, provider="freshdesk", ticket_id="42")
+    runner = SupportRunner()
+    result = pipeline.triage(hub, opened["case_id"], runner)
+    case = store.get_case(store.connect(hub), opened["case_id"])
+    assert not result["checks_passed"] and case["state"] == "needs_owner" and case["current_reply"] is None
+    assert "source unavailable or outside scope" in case["note"]
+    assert runner.calls == ["desk-classifier"]
+
+
+def test_legacy_erp_invalid_classification_holds_before_backend_read(hub, monkeypatch):
+    from customer_desk import envelopes
+
+    configure(hub, DESK_SUPPORT_ENABLED=False, DESK_ERP_ENABLED=True, DESK_CLOCK="system")
+    opened = cases.intake(hub, envelopes.internal(surface="chat", customer_id="synthetic-customer",
+        text="Check this request", opened_by="operator@example.test", source_ref="bad-legacy-kind"))
+    monkeypatch.setattr(erp_config, "backend", lambda *a, **kw: pytest.fail("Invalid category must not gather ERP"))
+    result = pipeline.triage(hub, opened["case_id"], SupportRunner(category="invented_refund"))
+    assert result["error"] == "invalid_category"
+    case = store.get_case(store.connect(hub), opened["case_id"])
+    assert case["state"] == "needs_owner" and case["current_reply"] is None
+
+
 @pytest.mark.parametrize("change", [("status: approved", "status: draft"),
     ("company: Synthetic Meridian Distribution", "company: Another Company"),
     ("audience: customer", "audience: internal"), ("language: en", "language: fr")])

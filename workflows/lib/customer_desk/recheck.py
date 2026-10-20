@@ -44,15 +44,14 @@ def changed_facts(hub_dir: Path, case: dict, facts: list[dict], *, erp=None, pol
             try:
                 reader, _ = desk.readers(hub_dir, config.settings(hub_dir))
                 _, ticket_id, thread_id = src["ref"].split(":", 2)
-                ticket = reader.ticket(ticket_id)
+                ticket, current, text = retrieval.precedent_text(reader, ticket_id, thread_id)
                 original_scope = src.get("scope") or {}
                 if (not retrieval.permitted(ticket, config.settings(hub_dir))
                         or str(ticket.get("departmentId")) != str(original_scope.get("department"))
+                        or str(ticket.get("productId") or "") != str(original_scope.get("product") or "")
+                        or ticket.get("language") != original_scope.get("language")
                         or str(ticket.get("statusType") or ticket.get("status")).lower() not in ("resolved", "closed")):
                     raise ValueError("Historical source scope/status changed")
-                current = reader.thread(ticket_id, thread_id)
-                names = list((ticket.get("contact") or {}).values())
-                text = retrieval.clean(current.get("plainText") or current.get("content") or "", names)
                 if current.get("status") == "DRAFT" or current.get("private") or text != src["text"]:
                     raise ValueError("Historical answer changed")
             except Exception:  # A denied/deleted/offline source cannot authorize draft delivery.

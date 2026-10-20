@@ -14,13 +14,13 @@ You are helping a builder set up the Customer Desk from this hub folder. Work in
 - Never approve a send, decide an exception or verify a delivery for the builder. Those are a person's own steps on the Work items page or in a confirmation card.
 - Never switch `customer_reply.send` to `approve` unless the builder asks for approved sending in so many words.
 
-## First result on the sample (about ten minutes)
+## First result on the sample
 
-1. `python -m venv .venv`, then `.venv/bin/pip install "hubzoid @ git+https://github.com/hubzoid/hubzoid@main" -r requirements.txt`.
-2. `.venv/bin/hubzoid hub doctor .` Every check should pass except `desk-roles`, which warns until people hold the desk roles. Say "Sample mode. ERPNext backend sample, read only. Replies go to the sample outbox only."
-3. Add `HUBZOID_SCHEDULES=1` to `.env` and start the hub: `.venv/bin/hubzoid run . --port 8721`.
-4. `.venv/bin/python desk sample load --wait 900` loads the twenty synthetic requests. If a station cannot reach the model, cases wait at `triaging` with `model_auth_required`: sign in to Claude Code or Codex and rerun.
-5. `.venv/bin/python desk list`, then `.venv/bin/python desk show CD-000007`. Present the queue as a table with case, customer, channel, request kinds, outcome and the first line of the reply. For one case show the facts with their ERPNext sources, the rules cited, the reply, the checks and the reviewer's verdict.
+1. `python3 -m venv .venv`, `source .venv/bin/activate`, then `python -m pip install -r requirements-sdk.txt -r requirements.txt`. Export `DESK_PYTHON="$PWD/.venv/bin/python"`. The SDK is pinned; do not install moving main.
+2. `python -m hubzoid hub doctor .` Every check should pass except `desk-roles`, which warns until people hold the desk roles. Say "Sample mode. ERPNext backend sample, read only. Replies go to the sample outbox only."
+3. Start the hub: `HUBZOID_SCHEDULES=1 python -m hubzoid run . --port 8721`.
+4. `./desk sample load --wait 900` loads the twenty synthetic requests. If a station cannot reach the model, cases wait at `triaging` with `model_auth_required`: sign in to the configured runtime and rerun.
+5. `./desk list`, then `./desk show CD-000007`. Present the queue as a table with case, customer, channel, request kinds, outcome and the first line of the reply. For one case show the facts with their ERPNext sources, the rules cited, the reply, the checks and the reviewer's verdict.
 6. Compare with the expected spread: six order status answers (three on track, one late order with a delivery ticket, one draft order not confirmed, one cancelled), four invoice copies with the PDF, two statements, three price and availability answers (a contract price, an item out of stock in the main warehouse, a disabled item not quoted), two delivery changes (one proposal, one already delivered) and three complaints (one refund above the policy amount waiting for the exception team). The exact outcome per request is `evals/expected/customer-desk-20.json`.
 
 Nothing is sent. Email replies are at most drafts in the sample mailbox, and WhatsApp replies are off.
@@ -30,7 +30,7 @@ Nothing is sent. Email replies are at most drafts in the sample mailbox, and Wha
 "Take the invoice copy case, enable approved sending for the sample outbox, and let me approve it myself."
 
 1. Show the diff to `work-items.yaml` setting `customer_reply.send: approve`, and apply it only after the builder says yes.
-2. `.venv/bin/python desk claim CD-000007`, then `.venv/bin/python desk send-request CD-000007 --reply N --digest sha256:...` with the values from `desk show`.
+2. `./desk claim CD-000007`, then `./desk send-request CD-000007 --reply N --digest sha256:...` with the values from `desk show`.
 3. It prints `human_action_required`. Stop and tell the builder to open the Work items page and approve the exact reply. You cannot approve it.
 4. When they say done, `desk show CD-000007` reads "Sample outbox accepted the reply. No customer delivery." with the receipt.
 
@@ -40,7 +40,7 @@ Nothing is sent. Email replies are at most drafts in the sample mailbox, and Wha
 
 1. Copy the originals unchanged into `knowledge/sources/`.
 2. Edit `knowledge/desk-policy.md` and `knowledge/customer-messages.md`. Do not add any rule their files do not state.
-3. `.venv/bin/python desk policy validate`, and tell them each gap it lists, in its own words.
+3. `./desk policy validate`, and tell them each gap it lists, in its own words.
 4. Rerun one case and show the difference.
 
 A correction from chat ("Never give exact stock numbers, say in stock, limited or out of stock") becomes a hub change proposal that a manager applies. Then rerun the case, restart the hub, and rerun again to show the rule came from the file.

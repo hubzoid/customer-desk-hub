@@ -175,7 +175,7 @@ def write_modes(context):
         if "whatsapp" in ch and mode == "draft":
             problems.append(f"{ch} is in draft mode, but WhatsApp has no drafts")
         if ch in ("zoho_desk", "freshdesk") and mode == "approve":
-            problems.append("zoho_desk is in approve mode, but the desk never sends from the helpdesk")
+            problems.append(f"{ch} is in approve mode, but the desk never sends from the helpdesk")
     if problems:
         return _fail("; ".join(problems) + ".", "In work-items.yaml set WhatsApp channels to off or approve, and the "
                      "helpdesk to off or draft, under write_mode_overrides.")
@@ -250,7 +250,7 @@ def roles(context):
     empty = [r for r in ROLES if not held.get(r)]
     if empty:
         return _warn(f"Nobody holds {', '.join(empty)} yet.", "Grant the roles in Settings, Agents, this agent, "
-                     "Access, or with: hubzoid grant EMAIL desk_operator --hub HUB .")
+                     "Access, or with: python -m hubzoid grant EMAIL desk_operator .")
     return _ok("Every desk role has at least one person: " + ", ".join(f"{k} {v}" for k, v in sorted(held.items())))
 
 

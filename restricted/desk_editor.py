@@ -19,12 +19,13 @@ from customer_desk.helpdesk import desk, editor  # noqa: E402
 @function_tool
 @chat.guard
 def desk_editor_payload(ticket_id: str, agent_id: str, placed_digest: str | None = None,
-                        claim: bool = False, placement_token: str | None = None) -> str:
+                        claim: bool = False, placement_token: str | None = None, expected_digest: str | None = None) -> str:
     """For the native Freshdesk app: fetch a current scoped reply, or acknowledge editor placement.
     Identity is the verified MCP caller, never an email supplied in arguments. Placement does not attest persistence."""
     reader, _ = desk.readers(HUB, config.settings(HUB))
     return json.dumps(editor.payload(HUB, chat.actor(HUB), ticket_id=ticket_id, agent_id=agent_id,
-                                     reader=reader, placed_digest=placed_digest, claim=claim, placement_token=placement_token))
+                                     reader=reader, placed_digest=placed_digest, claim=claim, placement_token=placement_token,
+                                     expected_digest=expected_digest))
 
 
 @function_tool
