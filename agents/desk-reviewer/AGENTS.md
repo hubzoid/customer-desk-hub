@@ -2,8 +2,6 @@
 name: desk-reviewer
 description: Independently checks a proposed customer reply against the policy and the facts before a person sees it.
 isolated: true
-engine: claude-local
-model: sonnet
 tools: []
 response_schema: schemas/result.json
 timeout_seconds: 120

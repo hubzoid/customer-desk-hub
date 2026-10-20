@@ -6,8 +6,8 @@ new copy replaces this folder and this file.
 
 | | |
 |---|---|
-| Canonical module | `hubzoid/order-invoice-desk-hub:erp/` (`erp.CANONICAL`) |
-| Source commit | `4c37c7013f5299c58a3eba746b31b68f6ca055a7` |
+| Canonical module | `hubzoid/order-desk-hub:erp/` (`erp.CANONICAL` retains the legacy module name) |
+| Source commit | `a3c3993135ebffa2c291dac3a7780be46f7bf796` |
 | Copied on | 20 Oct 2026 |
 | Left out | `write.py`, `digest.py`, `bootstrap.py`: the write contract. The Customer Desk never writes to ERPNext and mounts no ERP write tool |
 
@@ -15,6 +15,8 @@ The desk reaches this module only through `workflows/lib/customer_desk/erpnext/`
 which refuses `writes_enabled: true` and always passes a customer `party_scope`.
 `tests/test_vendored_erp.py` checks every byte against the table below and every
 dataset file against `datasets/distributor-v1/manifest.json`.
+
+Coordinated canonical update: `service.py` and `config.py` include the 20 October build's SDK data-root and first-initialization fixes from the Order Desk worktree. `service.py` also rejects a configured data root while legacy ERP state still exists, before allocating a new deployment identity. The exact canonical commit is recorded above; it includes the initial reviewed implementation and the necessary identity guard author fix. No write contract was copied.
 
 ## Files
 
@@ -26,7 +28,7 @@ dataset file against `datasets/distributor-v1/manifest.json`.
 | `backends/frappe_rest.py` | `sha256:989015e88488f10ee3e10b1fafcbc9d113ac63d9e5924efb016d9686df46bd90` |
 | `backends/sample.py` | `sha256:26a89ea856f0ddef57434fea7429e086d89f2b5b04c17b20fede9c22b0417a8d` |
 | `cli.py` | `sha256:588b58e9eda9542ddee66dbfe35dcb0f7e575ffa5860c4e585c2349c2b13547a` |
-| `config.py` | `sha256:62ca157f58ef5fb723c4ff737a0609dd6d7f63239b6b76012437c8c060b93d9f` |
+| `config.py` | `sha256:973f383d933e622128490d81ea850104effd50c213f859164ff2b826048c1529` |
 | `datasets/__init__.py` | `sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 | `datasets/distributor-v1/README.md` | `sha256:55699122a9bd24dd44e9e7b4ed9cd6da9bc183e3daeffc255035e161ee772892` |
 | `datasets/distributor-v1/attachments/AH-3315.pdf` | `sha256:90ddf4a609481de7856c298f76ab391cd635604cc0b474436b5054b90c090881` |
@@ -123,4 +125,4 @@ dataset file against `datasets/distributor-v1/manifest.json`.
 | `models.py` | `sha256:12e0bb6285da59328f48dcab9171cee8dc559711b6710c6ffbc25c149c0785bb` |
 | `read.py` | `sha256:bdbc10715073da53bf4cf42a67831a96f9c3db330a37ab3685a836306dbb751c` |
 | `resources.py` | `sha256:bbb28fdad6826d3c4d3d6febcfef631fd09af8a3ade1421752b5ca0527d5bb3b` |
-| `service.py` | `sha256:b7e340e234f0bd80911548b1e3cf81e57eec89b323ecaaffa3c1cf03c4eb462b` |
+| `service.py` | `sha256:410cde848b0ff6866526b0eb9b6174b53e423f3399512ed5b517b7c494f1bb01` |

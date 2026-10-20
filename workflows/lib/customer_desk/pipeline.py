@@ -359,8 +359,12 @@ def _merge_classification(first: dict, second: dict | None, threshold: float) ->
 
 
 def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intake", instruction: str | None = None,
-           erp=None) -> dict:
+           erp=None, _erp_only: bool = False) -> dict:
     hub_dir = Path(hub_dir)
+    if config.settings(hub_dir)["DESK_SUPPORT_ENABLED"] and not _erp_only:
+        from . import support
+
+        return support.triage(hub_dir, case_id, runner, trigger=trigger, instruction=instruction)
     loaded = load(hub_dir)
     values = loaded.values
     conn = store.connect(hub_dir)
@@ -429,6 +433,12 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
     requests = classification.get("requests") or [{"category": "other", "summary": "", "references": {
         "orders": [], "invoices": [], "items": [], "dates": {"requested_delivery": None, "from": None, "to": None}},
         "refund_requested": False, "amount_text": None}]
+    if (any(r.get("category") not in loaded.kinds.kinds for r in requests)
+            or any(c not in loaded.kinds.kinds for c in (second or {}).get("categories") or [])):
+        with store.tx(hub_dir) as tconn:
+            store.update_case(tconn, case_id, state="needs_owner", queue="operators", current_reply=None,
+                              note="Classification did not match the reviewed vocabulary. Review or rerun this case.")
+        return {"state": "needs_owner", "case_id": case_id, "checks_passed": False, "error": "invalid_category"}
 
     def gather_stage():
         backend = erp or erp_config.backend(hub_dir)

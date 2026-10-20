@@ -36,7 +36,7 @@ class Held(Exception):
 def channel_kind(channel_id: str | None) -> str:
     if not channel_id:
         return "internal"
-    if channel_id == "zoho_desk":
+    if channel_id in ("zoho_desk", "freshdesk"):
         return "helpdesk"
     if "whatsapp" in channel_id:
         return "whatsapp"
@@ -141,9 +141,32 @@ def zoho_draft(hub_dir: Path, values: dict, case: dict, reply: dict, *, transpor
     def save(args: dict) -> dict:
         from hubzoid.work_items import NotSent, Rejected
 
+        from . import recheck
+
+        conn = store.connect(hub_dir)
+        current = store.get_case(conn, case["id"])
+        fresh_reply = store.get_reply(conn, case["id"], reply["revision"])
+        resolution = store.get_resolution(conn, case["id"], reply["resolution"])
+        loaded = pipeline.load(hub_dir)
+        active = loaded.values
+        if (current["provider"] != active["DESK_HELPDESK"] or values["DESK_HELPDESK"] != active["DESK_HELPDESK"]
+                or current["current_reply"] != reply["revision"] or fresh_reply["state"] in ("superseded", "rejected")
+                or current["state"] in ("received", "triaging", "cancelled")
+                or any(resolution[k + "_digest"] != loaded.digests()[k] for k in ("policy", "style", "kinds"))
+                or recheck.changed_facts(hub_dir, current, store.get_facts(conn, case["id"], reply["resolution"]),
+                                        policy=loaded.policy)):
+            raise Rejected("reply_stale: case, rules or evidence changed before draft dispatch")
         reader, writer = desk.readers(hub_dir, values, transport=transport)
         if writer is None or not writer.policy.allow_drafts:
             raise NotSent("helpdesk_drafts_off: drafts need DESK_HELPDESK_MODE live and DESK_HELPDESK_DRAFTS true.")
+        if values.get("DESK_HELPDESK") == "freshdesk":
+            from .helpdesk import editor
+            from .actions import ActionError
+
+            try:
+                return editor.prepare(hub_dir, case, reply, reader)
+            except ActionError as exc:
+                raise Rejected(f"{exc.code}: {exc.message}") from None
         ticket_id = case["helpdesk_ticket_id"]
         conn = store.connect(hub_dir)
         inbound = conn.execute("SELECT latest_inbound_id FROM helpdesk_tickets WHERE ticket_id=?",
@@ -172,6 +195,9 @@ def zoho_draft(hub_dir: Path, values: dict, case: dict, reply: dict, *, transpor
                                     attachment_ids=ids)
         except (zoho.WriteRefused, zoho.WritesBlocked) as exc:
             raise NotSent(f"helpdesk_write_blocked: {exc}") from None
+        verified = reader.thread(ticket_id, str(th["id"]))
+        if verified.get("status") != "DRAFT" or mark not in (verified.get("content") or ""):
+            raise zoho.ZohoError(0, "draft_unconfirmed", "Draft creation lacks verified provider readback")
         return {"provider_draft_id": str(th["id"]), "ticket_id": ticket_id, "attachments": len(ids)}
 
     return save
@@ -186,6 +212,10 @@ def zoho_reconcile(hub_dir: Path, values: dict, case: dict, reply: dict, *, tran
         # Only a complete listing without the marker is proof the draft is not
         # there. A ticket too long to read in full is left to its requester.
         reader, _ = desk.readers(hub_dir, values, transport=transport)
+        if values.get("DESK_HELPDESK") == "freshdesk":
+            row = store.connect(hub_dir).execute("SELECT state FROM editor_deliveries WHERE case_id=? AND reply_revision=?",
+                                                (case["id"], reply["revision"])).fetchone()
+            return Reconciled("applied", {"state": row["state"]}) if row else Reconciled("safe_to_retry")
         mark = zoho.marker(case["helpdesk_ticket_id"], f"{case['id']}:{reply['revision']}")
         threads, complete = reader.all_threads(case["helpdesk_ticket_id"])
         for t in threads:

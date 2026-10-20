@@ -1,11 +1,10 @@
-#!/usr/bin/env python3
-"""The Customer Desk command line. Run it with the Python that has Hubzoid installed: ./desk --help"""
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent / "workflows" / "lib"))
-
-from customer_desk.cli import main  # noqa: E402
-
-if __name__ == "__main__":
-    sys.exit(main())
+#!/bin/sh
+# Use the actual interpreter, not a relocated venv entry-point shebang.
+DESK_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -n "${DESK_PYTHON:-}" ]; then
+  exec "$DESK_PYTHON" "$DESK_ROOT/scripts/desk.py" "$@"
+elif [ -x "$DESK_ROOT/.venv/bin/python" ]; then
+  exec "$DESK_ROOT/.venv/bin/python" "$DESK_ROOT/scripts/desk.py" "$@"
+else
+  exec python3 "$DESK_ROOT/scripts/desk.py" "$@"
+fi

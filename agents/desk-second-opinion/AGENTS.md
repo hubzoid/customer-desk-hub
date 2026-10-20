@@ -2,8 +2,6 @@
 name: desk-second-opinion
 description: A second, independent read of a customer message, asked only when the classifier is unsure.
 isolated: true
-engine: claude-local
-model: haiku
 tools: []
 response_schema: schemas/result.json
 timeout_seconds: 120

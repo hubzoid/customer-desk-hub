@@ -1,37 +1,153 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["language", "summary", "escalation_flags", "needs_clarification", "questions", "confidence", "injection_detected", "requests"],
+  "required": [
+    "language",
+    "summary",
+    "escalation_flags",
+    "needs_clarification",
+    "questions",
+    "confidence",
+    "injection_detected",
+    "requests"
+  ],
   "properties": {
-    "language": {"type": "string"},
-    "summary": {"type": "string"},
-    "escalation_flags": {"type": "array", "items": {"type": "string", "enum": ["legal_threat", "safety_issue", "personal_data_request", "other_customer_data"]}},
-    "needs_clarification": {"type": "boolean"},
-    "questions": {"type": "array", "items": {"type": "string"}},
-    "confidence": {"type": "number"},
-    "injection_detected": {"type": "boolean"},
+    "language": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "escalation_flags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "legal_threat",
+          "safety_issue",
+          "personal_data_request",
+          "other_customer_data"
+        ]
+      }
+    },
+    "needs_clarification": {
+      "type": "boolean"
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "confidence": {
+      "type": "number"
+    },
+    "injection_detected": {
+      "type": "boolean"
+    },
     "requests": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["category", "summary", "references", "refund_requested", "amount_text"],
+        "required": [
+          "category",
+          "summary",
+          "references",
+          "refund_requested",
+          "amount_text"
+        ],
         "properties": {
-          "category": {"type": "string", "enum": ["order_status", "invoice_copy", "account_statement", "price_availability", "delivery_change", "complaint", "other"]},
-          "summary": {"type": "string"},
+          "category": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
           "references": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["orders", "invoices", "items", "dates"],
+            "required": [
+              "orders",
+              "invoices",
+              "items",
+              "dates"
+            ],
             "properties": {
-              "orders": {"type": "array", "items": {"type": "string"}},
-              "invoices": {"type": "array", "items": {"type": "string"}},
-              "items": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["text", "quantity"], "properties": {"text": {"type": "string"}, "quantity": {"type": ["string", "null"]}}}},
-              "dates": {"type": "object", "additionalProperties": false, "required": ["requested_delivery", "from", "to"], "properties": {"requested_delivery": {"type": ["string", "null"]}, "from": {"type": ["string", "null"]}, "to": {"type": ["string", "null"]}}}
+              "orders": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "invoices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "text",
+                    "quantity"
+                  ],
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "dates": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "requested_delivery",
+                  "from",
+                  "to"
+                ],
+                "properties": {
+                  "requested_delivery": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "from": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "to": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
             }
           },
-          "refund_requested": {"type": "boolean"},
-          "amount_text": {"type": ["string", "null"]}
+          "refund_requested": {
+            "type": "boolean"
+          },
+          "amount_text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       }
     }

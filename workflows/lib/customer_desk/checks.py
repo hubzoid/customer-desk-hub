@@ -77,6 +77,9 @@ def run(*, case: dict, source: str, rendered: str, facts: dict, policy, author_k
 
     if "binding_ok" in which:
         ok = bool(case.get("customer_id")) and (case.get("origin_kind") == "internal" or bool(case.get("binding_id")))
+        if any((f.get("source") or {}).get("backend") == "support" for f in facts.values()) and not any(
+                (f.get("source") or {}).get("backend") in ("sample", "fake_rest", "frappe_rest") for f in facts.values()):
+            ok = True  # approved support evidence carries no private ERP/customer facts
         add("binding_ok", ok, "Bound to exactly one customer." if ok else "The case has no single bound customer.")
     if "facts_owned" in which:
         bad = [f["fact_id"] for f in facts.values()
@@ -97,7 +100,7 @@ def run(*, case: dict, source: str, rendered: str, facts: dict, policy, author_k
             if o["outcome"] not in o["allowed"]:
                 problems.append(f"request {o['request_no']} outcome {o['outcome']} is not allowed")
             cat = o["category"]
-            if cat != "other" and not policy.category(cat)["enabled"] and o["outcome"] != "acknowledge":
+            if cat in policy.data["categories"] and not policy.category(cat)["enabled"] and o["outcome"] != "acknowledge":
                 problems.append(f"{cat} is switched off")
         decided = {o["request_no"]: o["outcome"] for o in outcomes}
         for r in resolver_outcomes or []:

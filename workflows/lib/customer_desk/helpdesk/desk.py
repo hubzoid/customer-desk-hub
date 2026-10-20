@@ -34,6 +34,12 @@ AUTO_ACK = ("auto-reply", "automatic reply", "we have received your request", "t
 
 
 def readers(hub_dir: Path, values: dict, *, transport=None) -> tuple[zoho.Reader, zoho.Writer | None]:
+    if values.get("DESK_HELPDESK") == "freshdesk":
+        from . import freshdesk
+
+        reader = freshdesk.Reader(hub_dir, values, transport=transport)
+        writer = freshdesk.Writer(hub_dir, values, transport=transport) if zoho.policy_from(values) else None
+        return reader, writer
     state = store.db_path(hub_dir).parent / "zoho"
     reader = zoho.Reader(zoho.credentials(hub_dir, values, write=False), state_dir=state, transport=transport)
     writer = None
@@ -45,14 +51,14 @@ def readers(hub_dir: Path, values: dict, *, transport=None) -> tuple[zoho.Reader
 
 
 def latest_inbound(threads: list[dict]) -> dict | None:
-    real = [t for t in threads if t.get("direction") == "in" and t.get("status") != "DRAFT"]
+    real = [t for t in threads if t.get("direction") == "in" and t.get("status") != "DRAFT" and not t.get("private")]
     real = [t for t in real if not any(a in (t.get("summary") or "").lower() for a in AUTO_ACK)]
     return max(real, key=lambda t: (t.get("createdTime") or "", int(t["id"]) if str(t.get("id", "")).isdigit() else 0)) \
         if real else None
 
 
 def awaiting_reply(threads: list[dict]) -> bool:
-    sent = [t for t in threads if t.get("status") != "DRAFT"]
+    sent = [t for t in threads if t.get("status") != "DRAFT" and not t.get("private")]
     if not sent:
         return False
     last = max(sent, key=lambda t: (t.get("createdTime") or "", int(t["id"]) if str(t.get("id", "")).isdigit() else 0))
@@ -62,10 +68,16 @@ def awaiting_reply(threads: list[dict]) -> bool:
 def read_ticket(reader: zoho.Reader, ticket_id: str) -> dict:
     """The ticket, its threads, and the newest inbound message with its text."""
     ticket = reader.ticket(ticket_id)
-    threads = reader.threads(ticket_id)
+    threads, complete = reader.all_threads(ticket_id)
+    if not complete:
+        raise ValueError("Complete ticket history could not be read; no intake/draft is safe")
     inbound = latest_inbound(threads)
     message = reader.thread(ticket_id, inbound["id"]) if inbound else None
     return {"ticket": ticket, "threads": threads, "inbound": message}
+
+
+def ticket_key(values: dict, ticket_id: str) -> str:
+    return f"freshdesk:{ticket_id}" if values.get("DESK_HELPDESK") == "freshdesk" else str(ticket_id)
 
 
 def claim_message(hub_dir: Path, ticket: dict, inbound_id: str, *, owner: str | None = None) -> bool:
@@ -73,6 +85,7 @@ def claim_message(hub_dir: Path, ticket: dict, inbound_id: str, *, owner: str | 
     same work item replaying after a crash before the case was linked. The
     desk's own tag and draft writes change the ticket's modified time, and
     this check is what stops them from starting a new case loop."""
+    ticket = dict(ticket, id=ticket_key(config.settings(hub_dir), str(ticket["id"])))
     with store.tx(hub_dir) as conn:
         row = store.row(conn.execute("SELECT * FROM helpdesk_tickets WHERE ticket_id=?", (str(ticket["id"]),))
                         .fetchone())
@@ -93,7 +106,7 @@ def link_case(hub_dir: Path, ticket_id: str, case_id: str) -> None:
     """The message is a case now: handled for good."""
     with store.tx(hub_dir) as conn:
         conn.execute("UPDATE helpdesk_tickets SET case_id=?, status='handled' WHERE ticket_id=?",
-                     (case_id, str(ticket_id)))
+                     (case_id, ticket_key(config.settings(hub_dir), str(ticket_id))))
 
 
 # -- what to write -------------------------------------------------------------------
@@ -131,7 +144,7 @@ def note_for(view: dict, mark: str, *, replace_draft: bool = False) -> str:
             lines.append(f"Request {o['request_no']}: {o['category']} -> {o['outcome']} "
                          f"(rules {', '.join(o['rule_refs'])})")
         lines.append("")
-        lines.append("Facts read from ERPNext:")
+        lines.append("Source evidence (historical answers are precedent, not live account facts):")
         for f in view.get("facts") or []:
             s = f["source"]
             if s.get("backend") in ("policy", "desk"):
@@ -197,7 +210,9 @@ def preflight_draft(reader: zoho.Reader, ticket_id: str, inbound_id: str, mark: 
     ticket = reader.ticket(ticket_id)
     if (ticket.get("statusType") or ticket.get("status") or "").lower() in ("closed", "resolved"):
         return "closed", None
-    threads = reader.threads(ticket_id)
+    threads, complete = reader.all_threads(ticket_id)
+    if not complete:
+        return "incomplete_history", None
     newest = latest_inbound(threads)
     if newest and str(newest["id"]) != str(inbound_id):
         return "newer_message", None

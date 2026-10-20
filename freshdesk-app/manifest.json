@@ -1,0 +1,1 @@
+{"platform-version":"3.0","modules":{"common":{"requests":{"hub_get":{},"hub_json":{},"hub_token":{}}},"support_ticket":{"location":{"ticket_sidebar":{"url":"index.html","icon":"icon.svg"}}}},"engines":{"node":"18.16.0","fdk":"9.1.0"}}

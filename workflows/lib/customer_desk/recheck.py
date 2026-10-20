@@ -26,6 +26,38 @@ def _num(v):
 
 def changed_facts(hub_dir: Path, case: dict, facts: list[dict], *, erp=None, policy=None) -> list[dict]:
     """Facts whose ERP source now reads differently. Empty means current."""
+    support_changes = []
+    for fact in facts:
+        src = fact.get("source") or {}
+        if src.get("backend") == "support" and src.get("kind") == "approved_knowledge":
+            import hashlib
+
+            rel = str(src.get("ref") or "").removeprefix("kb:")
+            path = (Path(hub_dir) / rel).resolve()
+            if (not path.is_relative_to(Path(hub_dir).resolve()) or not path.is_file()
+                    or "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest() != src.get("revision")):
+                support_changes.append({"fact_id": fact["fact_id"], "was": src.get("revision"), "now": "source changed/removed"})
+        if src.get("backend") == "support" and src.get("kind") == "historical_precedent":
+            from . import config
+            from .helpdesk import desk, retrieval
+
+            try:
+                reader, _ = desk.readers(hub_dir, config.settings(hub_dir))
+                _, ticket_id, thread_id = src["ref"].split(":", 2)
+                ticket, current, text = retrieval.precedent_text(reader, ticket_id, thread_id)
+                original_scope = src.get("scope") or {}
+                if (not retrieval.permitted(ticket, config.settings(hub_dir))
+                        or str(ticket.get("departmentId")) != str(original_scope.get("department"))
+                        or str(ticket.get("productId") or "") != str(original_scope.get("product") or "")
+                        or ticket.get("language") != original_scope.get("language")
+                        or str(ticket.get("statusType") or ticket.get("status")).lower() not in ("resolved", "closed")):
+                    raise ValueError("Historical source scope/status changed")
+                if current.get("status") == "DRAFT" or current.get("private") or text != src["text"]:
+                    raise ValueError("Historical answer changed")
+            except Exception:  # A denied/deleted/offline source cannot authorize draft delivery.
+                support_changes.append({"fact_id": fact["fact_id"], "was": src.get("ref"), "now": "historical source unavailable/changed"})
+    if not any((f.get("source") or {}).get("backend") in ERP_BACKENDS for f in facts):
+        return support_changes
     try:
         ctx = scope.erp_context(hub_dir, case, principal="desk-recheck")
     except scope.ScopeError:
@@ -54,7 +86,7 @@ def changed_facts(hub_dir: Path, case: dict, facts: list[dict], *, erp=None, pol
                 cache[key] = None
         return cache[key]
 
-    out = []
+    out = list(support_changes)
     for f in facts:
         src = f["source"]
         if src.get("backend") not in ERP_BACKENDS:

@@ -2,8 +2,6 @@
 name: desk-transcript-reader
 description: Finds each customer request in a meeting or call transcript and cites its line numbers.
 isolated: true
-engine: claude-local
-model: sonnet
 tools: []
 response_schema: schemas/result.json
 timeout_seconds: 120

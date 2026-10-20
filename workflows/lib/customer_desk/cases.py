@@ -13,6 +13,7 @@ from pathlib import Path
 from . import bindings, config, store
 
 OPEN_STATES = ("received", "binding_required", "triaging", "needs_owner", "in_review", "mailbox_draft_saved",
+               "awaiting_provider_editor", "awaiting_provider_confirmation", "provider_delivery_uncertain", "requires_manual_attachment",
                "helpdesk_draft_saved", "waiting_decision", "waiting_plan", "waiting_approval", "sending", "held",
                "ambiguous", "sent", "waiting_customer", "open_items")
 SURFACES = ("email", "whatsapp", "helpdesk", "chat", "transcript", "slack")

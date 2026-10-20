@@ -37,6 +37,8 @@ def _warn(summary, recovery=None):
 
 def erp_read_only(context):
     hub = _lib(context)
+    if not context["settings"].get("DESK_ERP_ENABLED", True):
+        return _ok("ERP disabled. General support does not require ERP configuration.")
     from customer_desk.erpnext import config as erp_config
 
     path = hub / "connectors" / "erpnext.yaml"
@@ -61,6 +63,8 @@ def erp_read_only(context):
 
 def erp_company(context):
     hub = _lib(context)
+    if not context["settings"].get("DESK_ERP_ENABLED", True):
+        return _ok("ERP disabled. General support does not require ERP configuration.")
     from customer_desk.erpnext import config as erp_config
 
     cfg = erp_config.load(hub)
@@ -73,6 +77,8 @@ def erp_company(context):
 
 def erp_reads(context):
     hub = _lib(context)
+    if not context["settings"].get("DESK_ERP_ENABLED", True):
+        return _ok("ERP disabled. General support does not require ERP configuration.")
     from customer_desk.erpnext import config as erp_config
     from customer_desk.erpnext.contract import ERPContext, ERPError
 
@@ -96,6 +102,8 @@ def erp_reads(context):
 
 def sample_data(context):
     hub = _lib(context)
+    if not context["settings"].get("DESK_ERP_ENABLED", True):
+        return _ok("ERP disabled. General support does not require ERP configuration.")
     from customer_desk.erpnext import config as erp_config
 
     cfg = erp_config.load(hub)
@@ -158,16 +166,16 @@ def write_modes(context):
     except Exception as exc:  # noqa: BLE001
         return _fail(f"work-items.yaml is invalid: {exc}", "Run hubzoid work-items validate .")
     channels = list(context["settings"].get("DESK_EXTERNAL_CHANNELS") or [])
-    if context["settings"].get("DESK_HELPDESK") == "zoho_desk":
-        channels.append("zoho_desk")
+    if context["settings"].get("DESK_HELPDESK") in ("zoho_desk", "freshdesk"):
+        channels.append(context["settings"]["DESK_HELPDESK"])
     problems, shown = [], []
     for ch in channels:
         mode = wi_config.mode_for(cfg, ["customer_reply.send"], ch)
         shown.append(f"{ch} {mode}")
         if "whatsapp" in ch and mode == "draft":
             problems.append(f"{ch} is in draft mode, but WhatsApp has no drafts")
-        if ch == "zoho_desk" and mode == "approve":
-            problems.append("zoho_desk is in approve mode, but the desk never sends from the helpdesk")
+        if ch in ("zoho_desk", "freshdesk") and mode == "approve":
+            problems.append(f"{ch} is in approve mode, but the desk never sends from the helpdesk")
     if problems:
         return _fail("; ".join(problems) + ".", "In work-items.yaml set WhatsApp channels to off or approve, and the "
                      "helpdesk to off or draft, under write_mode_overrides.")
@@ -199,6 +207,12 @@ def channels(context):
 def helpdesk(context):
     _lib(context)
     s = context["settings"]
+    if s.get("DESK_HELPDESK") == "freshdesk":
+        missing = [n for n in ("FRESHDESK_API_KEY",) if not (context.get("available") or {}).get(n)]
+        if missing or not s.get("FRESHDESK_API_BASE") or not s.get("FRESHDESK_GROUP_ID"):
+            return _fail("Freshdesk needs API base, explicit group and credential reference.",
+                         "Use the builder recipe and hubzoid secrets set. No secret values in chat.")
+        return _warn("Freshdesk configured. Editor app/linked agent required. Persistence remains unqualified until provider evidence.")
     if s.get("DESK_HELPDESK") != "zoho_desk":
         return _ok("No helpdesk connected.")
     avail = context.get("available") or {}
@@ -236,7 +250,7 @@ def roles(context):
     empty = [r for r in ROLES if not held.get(r)]
     if empty:
         return _warn(f"Nobody holds {', '.join(empty)} yet.", "Grant the roles in Settings, Agents, this agent, "
-                     "Access, or with: hubzoid grant EMAIL desk_operator --hub HUB .")
+                     "Access, or with: python -m hubzoid grant EMAIL desk_operator .")
     return _ok("Every desk role has at least one person: " + ", ".join(f"{k} {v}" for k, v in sorted(held.items())))
 
 
@@ -258,13 +272,13 @@ def live_mode(context):
         return _ok("Sample mode. Cases stay in the sample namespace.")
     from customer_desk.erpnext import config as erp_config
 
-    cfg = erp_config.load(hub)
+    cfg = erp_config.load(hub) if s.get("DESK_ERP_ENABLED", True) else None
     problems = []
-    if cfg.backend != "frappe_rest":
+    if cfg is not None and cfg.backend != "frappe_rest":
         problems.append("live mode needs backend: frappe_rest")
     if s.get("DESK_CLOCK") != "system":
         problems.append("live mode needs DESK_CLOCK: system")
     if problems:
         return _fail("desk_setting_invalid: " + "; ".join(problems) + ".", "Fix hub.settings.yaml and "
                      "connectors/erpnext.yaml, then rerun hubzoid hub configure . --check.")
-    return _ok("Live mode against ERPNext, read only.")
+    return _ok("Live support. ERPNext read only." if cfg else "Live support without ERP.")

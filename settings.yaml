@@ -1,11 +1,11 @@
 version: 1
 settings:
   - name: DESK_MODE
-    description: "sample reads the synthetic ERP and sends only to the sample outbox. live reads your ERPNext and uses your channels."
+    description: "sample labels synthetic work. live uses configured helpdesk/channels, with optional read-only ERP."
     enum: [sample, live]
     default: sample
   - name: DESK_COMPANY
-    description: The exact ERPNext company name. Must equal company in connectors/erpnext.yaml.
+    description: Company source scope. With ERP enabled, must equal the exact ERPNext company.
     required: true
     example: Synthetic Meridian Distribution
   - name: DESK_CLOCK
@@ -64,7 +64,7 @@ settings:
     default: 0.75
   - name: DESK_HELPDESK
     description: "none, or zoho_desk to take tickets in from Zoho Desk and write tags, a private note and an unsent draft back."
-    enum: [none, zoho_desk]
+    enum: [none, zoho_desk, freshdesk]
     default: none
   - name: DESK_HELPDESK_MODE
     description: "dry-run records intended helpdesk writes only. shadow writes tags with a shadow prefix and keeps drafts as previews. live writes."
@@ -111,3 +111,33 @@ settings:
     secret: true
   - name: ZOHO_DESK_WRITE_REFRESH_TOKEN
     secret: true
+
+  - name: DESK_SUPPORT_ENABLED
+    description: General support from approved articles, current conversation and resolved helpdesk answers.
+    type: boolean
+    default: false
+  - name: DESK_ERP_ENABLED
+    description: Enable the existing read-only ERP jobs. Disable for support without ERP.
+    type: boolean
+    default: true
+  - name: DESK_KNOWLEDGE_DIR
+    default: knowledge/support
+  - name: DESK_SUPPORT_HISTORY
+    type: boolean
+    default: true
+  - name: DESK_SUPPORT_PRODUCT
+    description: Optional exact provider product id. Applied before ticket reads and retrieval.
+    default: ""
+  - name: DESK_SUPPORT_LANGUAGE
+    default: en
+  - name: DESK_SUPPORT_AUDIENCE
+    default: customer
+  - name: FRESHDESK_API_BASE
+    description: Your tenant HTTPS API base, for example https://company.freshdesk.com/api/v2.
+    default: ""
+  - name: FRESHDESK_GROUP_ID
+    description: Required group boundary for Freshdesk intake and historical answer retrieval.
+    default: ""
+  - name: FRESHDESK_API_KEY
+    secret: true
+    description: Dedicated restricted integration account API key. Never enter it in chat.

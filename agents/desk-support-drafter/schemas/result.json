@@ -1,0 +1,1 @@
+{"type":"object","additionalProperties":false,"required":["should_draft","reply","citations","reason"],"properties":{"should_draft":{"type":"boolean"},"reply":{"type":"string"},"citations":{"type":"array","items":{"type":"string"}},"reason":{"type":"string"}}}

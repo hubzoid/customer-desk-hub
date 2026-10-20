@@ -126,7 +126,7 @@ def show(hub_dir: Path, case_ref: str) -> str:
             f"- {r['no']}. {r['category']}: **{r['outcome']}** (rules {', '.join(r['rules'])})"
             + (f" {' '.join(r['notes'])}" if r["notes"] else "") for r in cv["requests"])})
     if cv["facts"]:
-        sections.append({"heading": "Facts from ERPNext", "markdown": "\n".join(
+        sections.append({"heading": "Source evidence", "markdown": "\n".join(
             f"- {f['id']} {f['value'][:160]} ({f['source']}, read {f['observed_at']})" for f in cv["facts"])})
     r = cv["reply"]
     if r:
@@ -174,8 +174,10 @@ def next_steps(hub_dir: Path, view: dict) -> str:
         mode = actions._mode(hub_dir, c["channel_id"]) if c["origin_kind"] == "external" else "internal"
         if c["origin_kind"] == "internal":
             out.append("Internal case: copy the reply and deliver it yourself.")
+        elif c["channel_id"] == "freshdesk":
+            out.append("Open the ticket in Freshdesk and use the Customer Desk app to show and, if wanted, replace the editor text. No saved draft or send is claimed; review and send personally there.")
         elif replies.channel_kind(c["channel_id"]) == "helpdesk":
-            out.append("The helpdesk has the unsent draft. Edit and send it there.")
+            out.append("Check the ticket in the helpdesk. A saved unsent draft is confirmed only when the case reports helpdesk_draft_saved.")
         elif mode == "approve":
             out.append("Ask to send: you approve the exact reply on the Work items page.")
         elif mode == "draft":

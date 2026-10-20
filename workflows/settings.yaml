@@ -5,4 +5,8 @@ webhooks:
     verify: header
     header: X-Webhook-Secret
     event_key: "{ticketId}:{event}:{firedAt}"
+  freshdesk:
+    verify: header
+    header: X-Webhook-Secret
+    event_key: "{ticket_id}:{event}:{fired_at}"
 webhook_retry_delays: [60, 300]

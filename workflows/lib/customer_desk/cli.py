@@ -438,6 +438,39 @@ def cmd_transcript(args, hub_dir):
                                        start=starter(hub_dir)))
 
 
+def cmd_ticket(args, hub_dir):
+    actor = local_actor(hub_dir, args.as_)
+    actions.require(actor, "desk_operator")
+    values = config.settings(hub_dir)
+    if values["DESK_HELPDESK"] not in ("zoho_desk", "freshdesk") or not str(args.ticket_id).isdigit():
+        return fail(args, "validation_failed", "Configure a helpdesk and provide a numeric ticket id")
+    item = starter(hub_dir)("customer_desk_intake", key=f"manual:{values['DESK_HELPDESK']}:{args.ticket_id}:{store.new_id()}",
+                           route="triage", input={"kind": "helpdesk", "ticket_id": args.ticket_id}, requester=actor.email)
+    return out(args, {"state": "queued", "work_item": item["id"], "ticket_id": args.ticket_id})
+
+
+def cmd_editor_link(args, hub_dir):
+    from .helpdesk import desk, editor
+
+    values = config.settings(hub_dir)
+    if values["DESK_HELPDESK"] != "freshdesk":
+        return fail(args, "validation_failed", "Select DESK_HELPDESK: freshdesk first")
+    actor = local_actor(hub_dir, args.as_)
+    actions.require(actor, "manage_access")
+    reader, _ = desk.readers(hub_dir, values)
+    return out(args, editor.link(hub_dir, actor, agent_id=args.agent_id, principal=args.principal, reader=reader))
+
+
+def cmd_editor_reconcile(args, hub_dir):
+    from .helpdesk import editor
+
+    actor = local_actor(hub_dir, args.as_)
+    actions.require(actor, "manage_access")
+    if not confirm(args, f"After inspecting Freshdesk ticket {args.ticket_id}, record editor placement as {args.decision}?"):
+        return fail(args, "human_action_required", "No editor claim changed")
+    return out(args, editor.reconcile(hub_dir, actor, ticket_id=args.ticket_id, decision=args.decision))
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="desk", description="The Customer Desk command line.")
     ap.add_argument("--hub", default=os.environ.get("DESK_HUB", "."))
@@ -458,6 +491,14 @@ def main(argv=None) -> int:
     s.add_argument("--wait", type=int, default=0, help="seconds to wait for triage to settle")
 
     sub.add_parser("erp-configure", help="apply connectors/erpnext.yaml (read only)")
+    ticket = sub.add_parser("ticket", help="triage one ticket in the configured helpdesk")
+    ticket.add_argument("ticket_id")
+    editor_link = sub.add_parser("editor-link", help="verify an operator's Freshdesk agent link")
+    editor_link.add_argument("--agent-id", required=True)
+    editor_link.add_argument("--principal", required=True)
+    editor_reconcile = sub.add_parser("editor-reconcile", help="human recovery of an uncertain editor claim")
+    editor_reconcile.add_argument("ticket_id")
+    editor_reconcile.add_argument("decision", choices=("not_inserted", "placed"))
 
     b = sub.add_parser("bindings", help="sender bindings")
     b.add_argument("verb", choices=["list", "import", "export", "add", "revoke"])
@@ -529,7 +570,8 @@ def main(argv=None) -> int:
                                         "erp-set": cmd_sample_erp_set}[a.verb](a, h),
                 "bindings": cmd_bindings, "list": cmd_list, "show": cmd_show, "policy": cmd_policy,
                 "metrics": cmd_metrics, "outbox": cmd_outbox, "ledger": cmd_ledger, "stop-writes": cmd_stop,
-                "transcript": cmd_transcript, "preview": cmd_preview, "erp-configure": cmd_erp_configure}
+                "transcript": cmd_transcript, "preview": cmd_preview, "erp-configure": cmd_erp_configure,
+                "ticket": cmd_ticket, "editor-link": cmd_editor_link, "editor-reconcile": cmd_editor_reconcile}
     handler = getattr(args, "handler", None) or handlers[args.cmd]
     try:
         return handler(args, hub_dir) or 0

@@ -4,6 +4,10 @@ desk_operator:
   label: Desk operator
   description: Claim cases, edit replies, save drafts and ask to send. A send still waits for the person's own approval.
   sensitive: true
+desk_editor:
+  label: Freshdesk native editor
+  description: Fetch current checked reply payloads through a verified Freshdesk account link. Requires desk_operator too.
+  sensitive: true
 desk_delivery:
   label: Desk delivery team
   description: Own late orders and delivery date changes, and verify a change in ERPNext.

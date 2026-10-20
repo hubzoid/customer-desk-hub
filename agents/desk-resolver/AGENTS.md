@@ -2,8 +2,6 @@
 name: desk-resolver
 description: Writes the proposed reply for one classified customer case from the facts the desk read in ERPNext, citing policy rules. Never types a fact.
 isolated: true
-engine: claude-local
-model: sonnet
 tools: [desk_orders, desk_invoice, desk_open_invoices, desk_prices, desk_availability, desk_find_items, desk_policy]
 response_schema: schemas/result.json
 timeout_seconds: 300
