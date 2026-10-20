@@ -1,0 +1,1 @@
+{"hubzoid_host":{"display_name":"Hubzoid HTTPS hostname","description":"Hostname only, without scheme or path. This is your trusted Hubzoid deployment.","type":"text","required":true},"mcp_path":{"display_name":"Hub MCP path","description":"/mcp or /b/<hub>/mcp","type":"text","required":true,"default_value":"/mcp"}}

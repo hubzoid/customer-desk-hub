@@ -4,11 +4,13 @@
 
 [![Built on Hubzoid](https://img.shields.io/badge/built%20on-Hubzoid-2f5bd3)](https://github.com/hubzoid/hubzoid)
 
-DRAFT. This README is a draft for review. Nothing here is published.
+This checkout implements the 20 October support proposal. Real provider, installed-runtime and hosting qualification is recorded separately in [the evidence log](docs/provider-qualification.md). Synthetic success is not a production-support claim.
 
-Customer Desk reads each customer email, WhatsApp message, helpdesk ticket, call note or meeting transcript, works out what the customer asked, reads the answer from your ERPNext, and prepares a reply your team can trust. A person approves every reply. The desk never writes to ERPNext and never sends anything on its own.
+Customer Desk prepares internal support suggestions from approved company knowledge, the current conversation and relevant resolved helpdesk answers. Connect Zoho Desk or Freshdesk without ERP. Optional read-only ERP jobs retain order, invoice, stock and policy safeguards. People review replies and send personally in their helpdesk. The desk never writes to ERPNext or sends on its own.
 
-It handles six kinds of request:
+Start with [your own material and a saved correction](docs/setup-support.md). Claude Code, available Cowork capabilities or Codex can follow that file/CLI path. [Zoho](docs/helpdesk-zoho.md) retains native drafts. [Freshdesk](docs/helpdesk-freshdesk.md) uses an authenticated native editor app and an explicit replacement confirmation. Editor placement remains pending provider confirmation until persistence can be verified.
+
+The optional ERP path retains these six jobs:
 
 | Request | What the desk does |
 |---|---|
@@ -26,13 +28,13 @@ It handles six kinds of request:
 - **Email replies are saved as drafts by default**, in your mailbox or helpdesk, for a person to finish and send there.
 - **WhatsApp has no drafts**, so WhatsApp replies stay off until you turn on approved sending.
 - **Approved sending** (`approve` mode, off by default): Hubzoid sends only after the person who asked approves the exact reply, recipients and attachments on the Work items page. Just before sending it rereads every ERPNext fact the reply uses. If anything changed, it refuses and drafts a new revision.
-- With a **helpdesk** (Zoho Desk first), the desk adds tags, a private note with the ERP facts and their sources, and the reply as an unsent draft. It never sends, closes or assigns a ticket.
+- With **Zoho**, the desk adds tags, private source evidence and an unsent draft after readback. With **Freshdesk**, tags and evidence are written server-side and the checked suggestion is available in its native app. An operator explicitly replaces editor text. Placement is not proof of a saved draft. Neither integration sends, closes or assigns a ticket.
 
 There is no automatic sending in this release.
 
-## Try it in ten minutes (sample data)
+## Run the existing synthetic ERP sample
 
-You need Python 3.11 or 3.12, Hubzoid 2.0 (until it is released, install it from the Hubzoid repository's main branch), and Claude Code or Codex signed in on this machine. No API key.
+You need Python 3.11/3.12 and a tested Hubzoid 2.0 revision, with your selected installed runtime configured. Record the exact pin and authentication used. Promotion requires a tagged SDK release. No setup-time guarantee of elapsed time or unattended subscription use is implied.
 
 The one prompt for Claude Code or Codex:
 
@@ -41,23 +43,28 @@ The one prompt for Claude Code or Codex:
 The same steps by hand:
 
 ```bash
-python -m venv .venv && .venv/bin/pip install "hubzoid @ git+https://github.com/hubzoid/hubzoid@main" babel
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-sdk.txt -r requirements.txt
+export DESK_PYTHON="$PWD/.venv/bin/python"
+```
+
+Use Python 3.11 or 3.12 for `python3` and have Git installed for the immutable SDK requirement. This installs SDK commit `c4bf1dbeaf0e498c364bfa1b1b97f10c7ae3c60c`, not a moving branch. The pin is development evidence, with a tagged SDK release still required for promotion.
+
+```bash
+.venv/bin/python -m hubzoid hub doctor .
 ```
 
 ```bash
-.venv/bin/hubzoid hub doctor .
+HUBZOID_SCHEDULES=1 .venv/bin/python -m hubzoid run . --port 8721
 ```
 
 ```bash
-echo "HUBZOID_SCHEDULES=1" >> .env && .venv/bin/hubzoid run . --port 8721
+./desk sample load --wait 900
 ```
 
 ```bash
-.venv/bin/python desk sample load --wait 900
-```
-
-```bash
-.venv/bin/python desk list
+./desk list
 ```
 
 Open the web app at http://127.0.0.1:8721 and ask: "What is waiting on the desk?" or "Show CD-000007".
@@ -83,7 +90,7 @@ The sample data is the `distributor-v1` dataset of the Order & Invoice Desk's ER
 - **Your reply style**: edit `knowledge/customer-messages.md`, with three to five of your best past replies and an approved template per outcome.
 - **A correction**: in chat, "Never give customers exact stock numbers. Say in stock, limited or out of stock, with limited meaning fewer than 20 units." The desk proposes the policy change as a reviewed hub change. Apply it, rerun a case, and the next reply follows it, also after a restart.
 - **Your ERPNext**: set `connectors/erpnext.yaml` to `backend: frappe_rest` with a read-only API key, then apply it with `./desk erp-configure`. See [docs/erp-permissions.md](docs/erp-permissions.md).
-- **Your helpdesk**: [docs/helpdesk-zoho.md](docs/helpdesk-zoho.md).
+- **Your helpdesk**: [Zoho](docs/helpdesk-zoho.md) or [Freshdesk](docs/helpdesk-freshdesk.md), with the [ERP-free setup path](docs/setup-support.md).
 - **Your senders**: import who speaks for which customer with `./desk bindings import --file contacts.csv --dry-run`. See [docs/bindings.md](docs/bindings.md).
 
 ## The team

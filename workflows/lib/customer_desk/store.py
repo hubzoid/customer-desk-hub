@@ -99,6 +99,12 @@ CREATE TABLE IF NOT EXISTS helpdesk_writes (
   request TEXT NOT NULL, response TEXT, status TEXT NOT NULL, error TEXT, owner TEXT, claimed_at REAL,
   attempts INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL, updated REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS cursor (name TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS editor_links (
+  provider TEXT NOT NULL, agent_id TEXT NOT NULL, principal TEXT NOT NULL, state TEXT NOT NULL,
+  verified_by TEXT NOT NULL, verified_at REAL NOT NULL, PRIMARY KEY(provider, agent_id));
+CREATE TABLE IF NOT EXISTS editor_deliveries (
+  case_id TEXT NOT NULL, reply_revision INTEGER NOT NULL, digest TEXT NOT NULL, inbound_id TEXT NOT NULL,
+  state TEXT NOT NULL, placed_by TEXT, claim_hash TEXT, updated REAL NOT NULL, PRIMARY KEY(case_id, reply_revision));
 CREATE TABLE IF NOT EXISTS outbox (
   id TEXT PRIMARY KEY, case_id TEXT NOT NULL, reply_revision INTEGER NOT NULL, channel_id TEXT NOT NULL,
   channel_kind TEXT NOT NULL, recipients TEXT NOT NULL, subject TEXT, body TEXT NOT NULL,
@@ -152,7 +158,9 @@ def connect(hub_dir: Path) -> sqlite3.Connection:
 
 #: Columns added after the first release of a table: (table, column, type). Additive only.
 ADDED_COLUMNS = [("cases", "page_url", "TEXT"), ("replies", "station_label", "TEXT"), ("cases", "origin", "TEXT"),
-                 ("case_events", "work_item_id", "TEXT")]
+                 ("case_events", "work_item_id", "TEXT"), ("cases", "page_readers", "TEXT"),
+                 ("cases", "page_generation", "INTEGER NOT NULL DEFAULT 0"),
+                 ("editor_deliveries", "claim_hash", "TEXT")]
 
 
 def migrate(conn: sqlite3.Connection) -> None:

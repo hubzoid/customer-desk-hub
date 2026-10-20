@@ -24,5 +24,8 @@ def zoho_desk_ticket():
 
 @workflow("every 1 minute")
 def zoho_desk_poll():
-    """Find tickets modified since the last look, with a 15 minute overlap."""
+    """Common provider poll: Zoho or Freshdesk, with a 15 minute overlap.
+
+    The existing workflow name is retained for scheduler compatibility.
+    """
     return intake_poll.poll()

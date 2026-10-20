@@ -169,7 +169,7 @@ def triage_item(inp: dict | None = None) -> dict:
         return result          # the newer triage of this case publishes and writes back
     publish_case_page(hub_dir, opened["case_id"])
     case = store.get_case(store.connect(hub_dir), opened["case_id"])
-    if case["surface"] == "helpdesk" and values["DESK_HELPDESK"] == "zoho_desk":
+    if case["surface"] == "helpdesk" and values["DESK_HELPDESK"] in ("zoho_desk", "freshdesk"):
         result["helpdesk"] = helpdesk_writeback(hub_dir, values, case)
     return result
 
@@ -226,7 +226,10 @@ def publish_case_page(hub_dir: Path, case_id: str) -> dict | None:
     path = Path(hub.run_dir) / f"case-{number}.html"
     path.write_text(casepage.render(view))
     readers = page_readers(hub_dir, hub.name)
-    digest = casepage.digest(view) + ":" + hashlib.sha256(",".join(readers).encode()).hexdigest()[:16]
+    # Returning to a previous ACL must create a fresh copy after its old copy
+    # was retired. Include the successful publication generation in the digest.
+    generation = int(view["case"].get("page_generation") or 0)
+    digest = casepage.digest(view) + ":" + hashlib.sha256(",".join(readers).encode()).hexdigest()[:16] + f":{generation}"
     try:
         if readers:
             page = hub.publish_artifact(str(path), title=f"Case {number}", key=f"case-{number.lower()}",
@@ -243,9 +246,10 @@ def publish_case_page(hub_dir: Path, case_id: str) -> dict | None:
     url = (page or {}).get("latest_url") or (page or {}).get("url")
     if url:
         with store.tx(hub_dir) as conn:
-            conn.execute("UPDATE cases SET page_url=? WHERE id=?", (url, case_id))
-            conn.execute("INSERT INTO cursor(name, value) VALUES ('page_readers', ?) ON CONFLICT(name) DO UPDATE "
-                         "SET value=excluded.value", (",".join(readers),))
+            # A global cursor let the first refreshed case hide the remaining
+            # old ACLs. Each case now acknowledges its own reader snapshot.
+            conn.execute("UPDATE cases SET page_url=?, page_readers=?, page_generation=page_generation+1 WHERE id=?",
+                         (url, ",".join(readers), case_id))
     return page
 
 
@@ -272,17 +276,34 @@ def refresh_pages_if_readers_changed(hub_dir: Path, start, *, limit: int = 100) 
     (run every minute by desk_upkeep). Each refresh is a small triage work item,
     so the page stays in its own workflow's series."""
     conn = store.connect(hub_dir)
-    hub_name = Path(hub_dir).name.lower()
+    from hubzoid.assertions import hub_key
+
+    hub_name = hub_key(hub_dir)
     readers = ",".join(page_readers(hub_dir, hub_name))
-    row = conn.execute("SELECT value FROM cursor WHERE name='page_readers'").fetchone()
-    if row is None or row["value"] == readers:
+    # Immediately retire every stale case copy, including copies beyond this
+    # tick's work budget. New pages are published under the upkeep identity.
+    # This avoids an old artifact owner retaining a revoked desk role's data.
+    stale = store.rows(conn.execute("SELECT id, number, page_generation FROM cases WHERE page_url IS NOT NULL "
+                                   "AND (page_readers IS NULL OR page_readers != ?) ORDER BY updated DESC", (readers,)))
+    if not stale:
         return 0
+    from sqlalchemy import bindparam, text
+    from hubzoid import artifacts
+
+    keys = [f"case-{c['number'].lower()}" for c in stale]
+    with artifacts._engine(hub_dir).begin() as db:
+        # Operational maintenance of this hub's own generated case artifacts.
+        # Tombstone every historical copy before any asynchronous refresh.
+        query = text("UPDATE hz_artifacts SET deleted=:now WHERE hub=:hub AND latest_key IN :keys "
+                     "AND deleted IS NULL").bindparams(bindparam("keys", expanding=True))
+        import time
+        for offset in range(0, len(keys), 256):
+            db.execute(query, {"now": time.time(), "hub": hub_name, "keys": keys[offset:offset + 256]})
     tag = hashlib.sha256(readers.encode()).hexdigest()[:12]
     n = 0
-    for c in store.rows(conn.execute("SELECT id FROM cases WHERE page_url IS NOT NULL ORDER BY updated DESC LIMIT ?",
-                                     (limit,))):
+    for c in stale[:limit]:
         try:
-            start("customer_desk_intake", key=f"page:{c['id']}:{tag}", route="triage",
+            start("customer_desk_intake", key=f"page:{c['id']}:{c['page_generation']}:{tag}", route="triage",
                   input={"kind": "page", "case_id": c["id"]}, requester="")
             n += 1
         except Exception:  # noqa: BLE001 - the next tick tries again
@@ -303,13 +324,15 @@ def helpdesk_intake(hub_dir: Path, values: dict, ticket_id: str) -> dict | None:
         got = desk.read_ticket(reader, ticket_id)
         if got["inbound"] is None:
             return None
-        dept = values.get("ZOHO_DESK_DEPARTMENT_ID") or ""
-        if dept and str(got["ticket"].get("departmentId")) != dept:
+        from .helpdesk.retrieval import permitted
+
+        if not permitted(got["ticket"], values):
             return None
         item_id = hub.work_item.id
         if not desk.claim_message(hub_dir, got["ticket"], str(got["inbound"]["id"]), owner=item_id):
             return None
         env = dict(envelopes.from_helpdesk(got["ticket"], got["inbound"],
+                                           provider=values["DESK_HELPDESK"],
                                            synthetic=config.namespace(values) == "sample"), work_item_id=item_id)
         opened = cases.intake(hub_dir, env)
         desk.link_case(hub_dir, ticket_id, opened["case_id"])
@@ -436,7 +459,8 @@ def helpdesk_draft(hub_dir: Path, values: dict, case: dict, reply: dict) -> str:
 
     # Unattended triage writes an unsent draft only. Any other mode would park
     # for an approval nobody attends, so it writes nothing and says why.
-    mode = wi_config.mode_for(wi_config.load(hub_dir), ["customer_reply.send"], "zoho_desk")
+    channel = values["DESK_HELPDESK"]
+    mode = wi_config.mode_for(wi_config.load(hub_dir), ["customer_reply.send"], channel)
     if mode != "draft":
         return f"not written: customer_reply.send is {mode} for zoho_desk, and the helpdesk takes drafts only"
     pl = replies.payload(hub_dir, case, reply)
@@ -444,7 +468,7 @@ def helpdesk_draft(hub_dir: Path, values: dict, case: dict, reply: dict) -> str:
         result = hub.operation.run(name="customer_reply", target={"case": case["number"], "reply": reply["revision"]},
                                    arguments=pl, recovery="reconcile",
                                    reconcile=replies.zoho_reconcile(hub_dir, values, case, reply),
-                                   actions="customer_reply.send", channel="zoho_desk",
+                                   actions="customer_reply.send", channel=channel,
                                    dispatch=replies.refuse_helpdesk_send,
                                    draft=replies.zoho_draft(hub_dir, values, case, reply))
     except WorkItemError as exc:
@@ -454,6 +478,11 @@ def helpdesk_draft(hub_dir: Path, values: dict, case: dict, reply: dict) -> str:
 
     def settle():
         with store.tx(hub_dir) as conn:
+            if result.get("state") in ("awaiting_provider_editor", "awaiting_provider_confirmation"):
+                store.upsert_send(conn, case["id"], reply["revision"], "draft", synthetic=case["synthetic"],
+                                  status=result["state"], receipt=result, requested_by="desk")
+                store.update_case(conn, case["id"], state=result["state"])
+                return result
             store.upsert_send(conn, case["id"], reply["revision"], "draft", synthetic=case["synthetic"],
                               provider_draft_id=result.get("provider_draft_id"), status="draft_saved",
                               receipt=result, requested_by="desk")
@@ -462,7 +491,7 @@ def helpdesk_draft(hub_dir: Path, values: dict, case: dict, reply: dict) -> str:
         return result
 
     hub.work_item.checkpoint(f"helpdesk-draft-r{reply['revision']}", settle)
-    return f"unsent draft {result.get('provider_draft_id')}"
+    return result.get("state") or f"unsent draft {result.get('provider_draft_id')}"
 
 
 # -- the attended send or draft ----------------------------------------------------------------
@@ -526,7 +555,7 @@ def case_item() -> dict:
 
     if channel in replies.SAMPLE_CHANNELS:
         kwargs = dict(dispatch=dispatch, draft=None if channel in replies.NO_DRAFT else draft, reconcile=reconcile)
-    elif channel == "zoho_desk":
+    elif channel in ("zoho_desk", "freshdesk"):
         kwargs = dict(dispatch=replies.refuse_helpdesk_send, draft=replies.zoho_draft(hub_dir, values, case, reply),
                       reconcile=replies.zoho_reconcile(hub_dir, values, case, reply))
     else:
@@ -621,7 +650,12 @@ def _settled(hub_dir, case, reply, action, result, requester):
     with store.tx(hub_dir) as conn:
         c = store.get_case(conn, case["id"])
         if action == "draft":
-            state = "helpdesk_draft_saved" if c["channel_id"] == "zoho_desk" else "mailbox_draft_saved"
+            if result.get("state") in ("awaiting_provider_editor", "awaiting_provider_confirmation"):
+                store.update_case(conn, case["id"], state=result["state"])
+                store.upsert_send(conn, case["id"], reply["revision"], "draft", synthetic=case["synthetic"],
+                                  status=result["state"], receipt=result, requested_by=requester)
+                return {"state": result["state"], "receipt": result}
+            state = "helpdesk_draft_saved" if c["channel_id"] in ("zoho_desk", "freshdesk") else "mailbox_draft_saved"
             store.upsert_send(conn, case["id"], reply["revision"], "draft", synthetic=case["synthetic"],
                               provider_draft_id=result.get("provider_draft_id") or result.get("receipt_id"),
                               status="draft_saved", receipt=result, requested_by=requester)

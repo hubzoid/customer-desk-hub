@@ -359,8 +359,12 @@ def _merge_classification(first: dict, second: dict | None, threshold: float) ->
 
 
 def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intake", instruction: str | None = None,
-           erp=None) -> dict:
+           erp=None, _erp_only: bool = False) -> dict:
     hub_dir = Path(hub_dir)
+    if config.settings(hub_dir)["DESK_SUPPORT_ENABLED"] and not _erp_only:
+        from . import support
+
+        return support.triage(hub_dir, case_id, runner, trigger=trigger, instruction=instruction)
     loaded = load(hub_dir)
     values = loaded.values
     conn = store.connect(hub_dir)

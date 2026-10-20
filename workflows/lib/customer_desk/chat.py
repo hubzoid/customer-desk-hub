@@ -126,7 +126,7 @@ def show(hub_dir: Path, case_ref: str) -> str:
             f"- {r['no']}. {r['category']}: **{r['outcome']}** (rules {', '.join(r['rules'])})"
             + (f" {' '.join(r['notes'])}" if r["notes"] else "") for r in cv["requests"])})
     if cv["facts"]:
-        sections.append({"heading": "Facts from ERPNext", "markdown": "\n".join(
+        sections.append({"heading": "Source evidence", "markdown": "\n".join(
             f"- {f['id']} {f['value'][:160]} ({f['source']}, read {f['observed_at']})" for f in cv["facts"])})
     r = cv["reply"]
     if r:

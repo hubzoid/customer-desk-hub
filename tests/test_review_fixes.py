@@ -259,7 +259,8 @@ def test_a_failing_model_reply_falls_back_to_the_templates(bound):
 
 # -- 26. the poll window moves past Zoho's offset limit ------------------------------------------------
 
-def test_poll_window_slides_instead_of_paging_past_5000(hub, monkeypatch):
+@pytest.mark.parametrize("provider", [None, "zoho_desk"])
+def test_poll_window_slides_instead_of_paging_past_5000(hub, monkeypatch, provider):
     monkeypatch.setattr(intake_poll, "MAX_PAGES", 1)
 
     class Reader:
@@ -269,13 +270,21 @@ def test_poll_window_slides_instead_of_paging_past_5000(hub, monkeypatch):
                     for i in range(limit)]
 
     values = {"ZOHO_DESK_DEPARTMENT_ID": None}
+    if provider is not None:
+        values["DESK_HELPDESK"] = provider
+    started = []
+
+    def start(*_args, **kwargs):
+        started.append(kwargs["key"])
+        return {"id": "x"}
     with store.tx(hub) as conn:
         conn.execute("INSERT INTO cursor(name, value) VALUES ('zoho_poll', ?)", (json.dumps(
             {"cursor": "2000-01-15T09:00:00.000Z", "window": {"start": "2000-01-15T09:00:00.000Z",
                                                             "end": "2000-01-15T11:00:00.000Z", "offset": 4900}}),))
-    out = intake_poll.poll_once(hub, values, Reader(), lambda *a, **k: {"id": "x"})
+    out = intake_poll.poll_once(hub, values, Reader(), start)
     assert out["cursor"]["window"]["offset"] == 0
     assert out["cursor"]["window"]["start"] == "2000-01-15T10:01:39.000Z"
+    assert len(started) == 100 and all(key.startswith("zoho_desk:") for key in started)
 
 
 # -- 25. a long ERPNext list is marked, never cut silently -----------------------------------------------

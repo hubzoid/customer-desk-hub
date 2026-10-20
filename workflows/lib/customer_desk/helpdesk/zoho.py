@@ -217,6 +217,13 @@ class Reader(_Base):
     def ticket(self, ticket_id: str) -> dict:
         return self._request("GET", f"/tickets/{int(ticket_id)}", params={"include": "contacts"})
 
+    def search_resolved(self, term: str, *, department_id: str) -> list[dict]:
+        if not re.fullmatch(r"[a-z]{3,30}", term):
+            raise ValueError("Unsafe search term")
+        body = self._request("GET", "/tickets/search", params={"_all": f"*{term}*", "status": "Closed,Resolved",
+                "departmentId": department_id, "limit": 30, "sortBy": "-modifiedTime"}) or {}
+        return body.get("data") or []
+
     def threads(self, ticket_id: str) -> list[dict]:
         body = self._request("GET", f"/tickets/{int(ticket_id)}/threads",
                              params={"limit": 200, "sortBy": "-sendDateTime"}) or {}
@@ -386,16 +393,14 @@ def current_policy(hub_dir: Path) -> "WritePolicy | None":
 
 def credentials(hub_dir: Path, values: dict, *, write: bool) -> Credentials:
     """From the hub's secret settings. Raises KeyError naming the missing one."""
-    from hubzoid.hubs import settings as hub_settings
-    from hubzoid import secretstore
+    from ..secrets import resolve
 
     prefix = "ZOHO_DESK_WRITE_" if write else "ZOHO_DESK_"
     got = {}
     for name in ("CLIENT_ID", "CLIENT_SECRET", "REFRESH_TOKEN"):
         key = prefix + name
-        ref = hub_settings.secret_ref(Path(hub_dir), key) or f"env:{key}"
         try:
-            got[name] = secretstore.resolve(ref, hub_dir)
+            got[name] = resolve(Path(hub_dir), key)
         except Exception:  # noqa: BLE001 - name the setting, never a value
             raise KeyError(key) from None
     return Credentials(client_id=got["CLIENT_ID"], client_secret=got["CLIENT_SECRET"],

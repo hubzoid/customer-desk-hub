@@ -12,6 +12,10 @@ from pathlib import Path
 from . import config, store
 
 STATE_TEXT = {
+    "requires_manual_attachment": "Reply body placed. Download the checked invoice PDF through the linked app and attach it personally in Freshdesk. Attachment delivery and draft persistence remain unverified.",
+    "provider_delivery_uncertain": "An operator claimed editor placement. Check Freshdesk manually before retrying. Claims never expire automatically.",
+    "awaiting_provider_editor": "Suggestion ready in the Freshdesk app. Choose it explicitly in the reply editor. Nothing sent.",
+    "awaiting_provider_confirmation": "Editor placement acknowledged. Provider persistence is not verified. Check Freshdesk before sending.",
     "received": "Received. The desk is about to read it.",
     "binding_required": "We could not match this sender to a customer. A binding admin binds the sender first. "
                         "No customer data was read.",

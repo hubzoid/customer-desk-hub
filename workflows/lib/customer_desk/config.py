@@ -33,7 +33,10 @@ def settings(hub_dir: Path) -> dict:
                 "DESK_MAX_REQUESTS_PER_CASE": 5, "DESK_REOPEN_DAYS": 14, "DESK_RESPONSE_TARGET_HOURS": 8,
                 "DESK_CASE_PREFIX": "CD", "DESK_TICKET_PREFIX": "TKT", "DESK_SECOND_OPINION_BELOW": 0.75,
                 "DESK_HELPDESK": "none", "DESK_HELPDESK_MODE": "dry-run", "DESK_HELPDESK_DRAFTS": False,
-                "ZOHO_DESK_TAG_PREFIX": "desk-"}
+                "ZOHO_DESK_TAG_PREFIX": "desk-", "DESK_SUPPORT_ENABLED": False, "DESK_ERP_ENABLED": True,
+                "DESK_KNOWLEDGE_DIR": "knowledge/support", "DESK_SUPPORT_HISTORY": True,
+                "FRESHDESK_API_BASE": "", "FRESHDESK_GROUP_ID": "", "DESK_SUPPORT_PRODUCT": "",
+                "DESK_SUPPORT_LANGUAGE": "en", "DESK_SUPPORT_AUDIENCE": "customer"}
     for k, v in defaults.items():
         values.setdefault(k, v)
     return values
@@ -46,7 +49,7 @@ def namespace(values: dict) -> str:
 def today(hub_dir: Path, values: dict | None = None) -> dt.date:
     """The desk's today: the sample dataset's fixed clock, or the real UTC date."""
     values = values or settings(hub_dir)
-    if values.get("DESK_CLOCK") == "dataset":
+    if values.get("DESK_CLOCK") == "dataset" and values.get("DESK_ERP_ENABLED", True):
         from .erpnext import config as erp_config
 
         cfg = erp_config.load(hub_dir)

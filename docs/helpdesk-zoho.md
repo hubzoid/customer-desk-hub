@@ -1,11 +1,11 @@
 # Zoho Desk
 
-DRAFT for review. Freshdesk and Zendesk are on the later list.
+Zoho implementation. Real-tenant qualification remains recorded in provider-qualification.md. Freshdesk now has its own native-editor integration, documented in helpdesk-freshdesk.md. Zendesk is outside this build.
 
 With Zoho Desk connected, tickets live in Zoho Desk and your team sends from there. For each new customer message the desk:
 
 1. rereads the ticket and its threads through the API (a webhook only names the ticket)
-2. binds the contact's email to one ERP customer, or tags the ticket `desk-binding-required` and reads nothing
+2. uses approved general support sources when enabled. Optional ERP jobs bind the contact to one ERP customer before private ERP reads
 3. prepares the case as usual
 4. writes back: the request kind tags, a private note with the case number, outcomes, ERP facts and their sources, the case number in one custom field if you name it, and the proposed reply as an unsent draft with the invoice PDF attached
 

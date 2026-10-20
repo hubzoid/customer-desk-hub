@@ -2,8 +2,6 @@
 name: desk-classifier
 description: Reads one customer message and sorts it into the desk's closed list of request kinds, with references and risk flags.
 isolated: true
-engine: claude-local
-model: sonnet
 tools: []
 response_schema: schemas/result.json
 timeout_seconds: 120

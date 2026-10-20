@@ -64,10 +64,17 @@ def load_kinds(hub_dir: Path, rel: str = "knowledge/request-kinds.md") -> Vocabu
     problems = []
     kinds = data.get("kinds") or {}
     prefix = data.get("tag_prefix") or ""
-    if set(kinds) != set(KINDS):
-        problems.append(f"kinds must be exactly {', '.join(KINDS)}")
+    if not isinstance(kinds, dict) or not kinds or "other" not in kinds:
+        raise VocabularyError(["kinds must be a mapping including other"], rel)
     tags = set()
     for key, k in kinds.items():
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", key) or not isinstance(k, dict):
+            raise VocabularyError([f"invalid category {key!r}"], rel)
+        if k.get("behavior", "erp" if key in KINDS[:-1] else "answer") not in (
+                "answer", "clarify", "review", "erp"):
+            problems.append(f"{key}.behavior must be answer, clarify, review or erp")
+        if k.get("behavior") == "erp" and key not in KINDS[:-1]:
+            problems.append(f"{key} has no implemented ERP job")
         for field in ("tag", "label", "guidance"):
             if not isinstance(k.get(field), str) or not k[field].strip():
                 problems.append(f"{key}.{field} is required")
@@ -82,7 +89,7 @@ def load_kinds(hub_dir: Path, rel: str = "knowledge/request-kinds.md") -> Vocabu
         problems.append(f"risk_flags must be exactly {', '.join(FLAGS)}")
     if problems:
         raise VocabularyError(problems, rel)
-    return Vocabulary(kinds={k: kinds[k] for k in KINDS}, boundaries=list(data.get("boundaries") or []),
+    return Vocabulary(kinds=kinds, boundaries=list(data.get("boundaries") or []),
                       risk_flags=flags, tag_prefix=prefix,
                       digest="sha256:" + hashlib.sha256(text.encode()).hexdigest())
 
