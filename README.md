@@ -173,6 +173,10 @@ instructions, a statement since 1990 and a resent question.
   `connectors/erpnext.yaml` to `backend: frappe_rest` with a read-only API key,
   then apply it with `./desk erp-configure`.
   [ERP permissions →](docs/erp-permissions.md)
+- **Your channels:** a support mailbox or a WhatsApp Business number, from
+  `channels/support-email.yaml.example` and
+  `channels/support-whatsapp.yaml.example`. Add each channel id to
+  `DESK_EXTERNAL_CHANNELS`.
 - **Your senders:** import who speaks for which customer with
   `./desk bindings import --file contacts.csv --dry-run`.
   [Bindings →](docs/bindings.md)

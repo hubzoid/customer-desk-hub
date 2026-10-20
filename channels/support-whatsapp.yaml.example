@@ -1,0 +1,31 @@
+# Your WhatsApp Business number on the Meta Cloud API, through Hubzoid's WhatsApp channel.
+# Copy to channels/support-whatsapp.yaml, replace the placeholder ids with yours, then:
+#   hubzoid channels validate . --file channels/support-whatsapp.yaml
+#   hubzoid channels apply . --file channels/support-whatsapp.yaml --expected-revision absent
+#   hubzoid secrets set . --name WHATSAPP_APP_SECRET --stdin
+#   hubzoid secrets set . --name WHATSAPP_VERIFY_TOKEN --stdin
+#   hubzoid secrets set . --name WHATSAPP_ACCESS_TOKEN --stdin
+# Add support-whatsapp to DESK_EXTERNAL_CHANNELS in hub.settings.yaml. The secrets are hub secrets,
+# secret:hub/<hub folder name>/<NAME>: change customer-desk below to your hub's folder name.
+# WhatsApp has no drafts, so replies stay off until approved sending is turned on in work-items.yaml.
+# See docs/channels/whatsapp.md in the SDK.
+version: 1
+id: support-whatsapp
+provider: whatsapp_cloud
+enabled: false
+workflow: customer_desk_intake
+run_as: workflow
+provider_config:
+  waba_id: "100000000000001"          # your WhatsApp Business Account id
+  phone_number_id: "100000000000002"  # the number's id (not the phone number)
+  graph_version: v22.0
+  app_secret_ref: secret:hub/customer-desk/WHATSAPP_APP_SECRET
+  verify_token_ref: secret:hub/customer-desk/WHATSAPP_VERIFY_TOKEN
+  access_token_ref: secret:hub/customer-desk/WHATSAPP_ACCESS_TOKEN
+  unknown_sender: quarantine
+  media:
+    max_bytes: 20971520
+    allowed_types: [application/pdf, image/jpeg, image/png]
+  replies:
+    mark_read: false
+    outside_window: hold

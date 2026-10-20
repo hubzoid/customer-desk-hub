@@ -1,7 +1,5 @@
 # Customer Desk architecture
 
-DRAFT for review.
-
 The desk is a Hubzoid hub folder. It adds no code to the Hubzoid SDK and runs only on SDK surfaces: work items, isolated agents (stations), intake, write modes, cards, restricted tools, HITL cards, artifacts, named webhooks and doctor checks.
 
 ## The folder
@@ -12,10 +10,15 @@ The desk is a Hubzoid hub folder. It adds no code to the Hubzoid SDK and runs on
 | `knowledge/desk-policy.md` | The policy: settings the code enforces, rules the stations cite as `[R1]` to `[R18]`. |
 | `knowledge/request-kinds.md` | The only list of request kinds, their helpdesk tags, boundary rules and risk flags. |
 | `knowledge/customer-messages.md` | Reply style and the approved template for each outcome. |
-| `agents/desk-*` | Five stations: classifier, second opinion, resolver, reviewer, transcript reader. |
+| `knowledge/support/`, `knowledge/support-kinds.md` | Support mode: approved company articles, and the request categories used without ERP. |
+| `agents/desk-*` | Seven stations: classifier, second opinion, resolver, reviewer and transcript reader, and for support mode a support drafter and a support reviewer. |
 | `workflows/customer_desk_intake` | Triage, unattended. |
 | `workflows/customer_desk_case` | A person's send or draft, attended. |
 | `workflows/zoho_desk` | The Zoho Desk webhook and the modified-ticket poll. |
+| `workflows/freshdesk` | Freshdesk ticket intake. |
+| `workflows/lib/customer_desk/helpdesk` | The Zoho Desk and Freshdesk clients, the Freshdesk editor payload, and read-only search of resolved answers. |
+| `freshdesk-app/` | The Freshdesk ticket-sidebar app that offers the checked reply to the agent. |
+| `scripts/setup_support.py` | Writes the support-mode settings for Zoho Desk or Freshdesk, with ERP off unless `--erp`. |
 | `workflows/desk_upkeep` | Keeps cases in step with sends people decided. |
 | `workflows/lib/customer_desk` | The desk library. Under `workflows/` so a code change stops in-flight work instead of running it on new code. |
 | `tools_local/`, `restricted/` | Chat tools. Each `restricted/desk_<role>.py` is visible only to people holding that role. |
@@ -70,6 +73,8 @@ An approved send is one Hubzoid operation. Before it leaves, the dispatch reread
 ## The helpdesk
 
 `helpdesk/zoho.py` has a read client that only sends GET and a write client whose one request method allows exactly five calls: prefixed tags, private notes carrying the desk marker, one configured case field, an unsent draft reply carrying the marker, and uploads for that draft. The stop switch (`./desk stop-writes on` or `DESK_STOP_WRITES=1`) is read at the moment of each write, and is the instant control. The mode and the draft switch are checked at each write too, against the settings in force (Hubzoid reads hub settings when the process starts, so a mode change applies after a restart). A recovery check counts a write as not made only when it read the ticket's whole listing. Webhook bodies only name a ticket. The desk rereads it, handles each inbound message once, and ignores the ticket changes its own writes cause.
+
+`helpdesk/freshdesk.py` reads Freshdesk v2 with GET and writes only namespaced tags and private notes. It has no send API. The checked reply reaches the agent through the Freshdesk app in `freshdesk-app/`, as an authenticated editor payload (`helpdesk/editor.py`) that the agent inserts with an explicit confirmation. Placing text in the editor is never recorded as a saved draft. In support mode, `helpdesk/retrieval.py` searches resolved answers read-only; that evidence is data, never a grant or a current fact.
 
 ## Identity and roles
 
