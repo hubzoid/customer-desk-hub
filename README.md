@@ -1,114 +1,212 @@
-# Customer Desk
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hubzoid/hubzoid/72ac7bf1610c8a335b9b3ac3b536de8fdb6770f1/assets/mark-dark.svg">
+    <img alt="Hubzoid" src="https://raw.githubusercontent.com/hubzoid/hubzoid/72ac7bf1610c8a335b9b3ac3b536de8fdb6770f1/assets/mark-light.svg" width="200">
+  </picture>
+</p>
 
-**A ready-made Hubzoid hub for your customer care team. Context to resolution: each customer request ends in an action taken or a reply ready to send.**
+<h1 align="center">Customer Desk</h1>
+<h3 align="center">Customer replies, drafted from your knowledge and systems.</h3>
+<p align="center">Every fact sourced. A person approves every reply.</p>
+<p align="center">
+  <a href="https://youtu.be/uJ6QdNVSFHM">Watch the video</a> ·
+  <a href="docs/setup-support.md">Setup guide</a> ·
+  <a href="docs/helpdesk-zoho.md">Zoho Desk</a> ·
+  <a href="docs/helpdesk-freshdesk.md">Freshdesk</a> ·
+  <a href="https://github.com/hubzoid/hubzoid">Hubzoid</a>
+</p>
+<p align="center">
+  <a href="https://github.com/hubzoid/hubzoid"><img src="https://img.shields.io/badge/Built%20on-Hubzoid-B5471F" alt="Built on Hubzoid"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-0B0B0C" alt="Apache License 2.0"></a>
+</p>
 
-[![Built on Hubzoid](https://img.shields.io/badge/built%20on-Hubzoid-2f5bd3)](https://github.com/hubzoid/hubzoid)
+**The Customer Desk is a ready-to-use Hubzoid hub for your customer care team.
+It reads each customer request in your helpdesk, finds the answer in your
+approved company knowledge, the ticket's conversation and relevant resolved
+answers, and prepares a reply your team reviews and sends.** Connect Zoho Desk
+or Freshdesk. Add a read-only ERPNext connection to answer order, invoice,
+statement, price and delivery questions from your own records.
 
-This checkout implements the 20 October support proposal. Real provider, installed-runtime and hosting qualification is recorded separately in [the evidence log](docs/provider-qualification.md). Synthetic success is not a production-support claim.
+<p align="center">
+  <a href="https://youtu.be/uJ6QdNVSFHM"><img alt="Watch: customer replies, drafted from your systems" src="https://img.youtube.com/vi/uJ6QdNVSFHM/maxresdefault.jpg" width="640"></a>
+</p>
 
-Customer Desk prepares internal support suggestions from approved company knowledge, the current conversation and relevant resolved helpdesk answers. Connect Zoho Desk or Freshdesk without ERP. Optional read-only ERP jobs retain order, invoice, stock and policy safeguards. People review replies and send personally in their helpdesk. The desk never writes to ERPNext or sends on its own.
+## How it works for you
 
-Start with [your own material and a saved correction](docs/setup-support.md). Claude Code, available Cowork capabilities or Codex can follow that file/CLI path. [Zoho](docs/helpdesk-zoho.md) retains native drafts. [Freshdesk](docs/helpdesk-freshdesk.md) uses an authenticated native editor app and an explicit replacement confirmation. Editor placement remains pending provider confirmation until persistence can be verified.
-
-The optional ERP path retains these six jobs:
-
-| Request | What the desk does |
+| A customer asks | The desk does |
 |---|---|
-| Where is my order | Reads the order: status, delivery date, what is delivered. A late order opens a ticket for the delivery team. |
-| Invoice copy | Attaches the official ERPNext print of the customer's own submitted invoice. |
-| Account statement | Lists the customer's open invoices and credit notes, with a CSV. |
-| Price and availability | Quotes the customer's own price list, and stock as your policy allows: exact, in bands, or not at all. |
-| Delivery date change | Checks the notice period and proposes the change to the delivery team. It confirms only after ERPNext shows the new date. |
-| Complaint or refund | Opens a ticket. A refund outside your policy waits for a named person to decide. |
+| A question your knowledge answers | Prepares the reply from your approved support articles, citing each source. |
+| Where is my order | Reads the order from ERPNext: status, delivery date, what is delivered. A late order opens a ticket for the delivery team. |
+| An invoice copy | Attaches the official ERPNext print of the customer's own submitted invoice. |
+| An account statement | Lists the customer's open invoices and credit notes, with a CSV. |
+| A price or availability | Quotes the customer's own price list, and stock as your policy allows: exact, in bands, or not at all. |
+| A delivery date change | Checks the notice period and proposes the change to the delivery team. It confirms only after ERPNext shows the new date. |
+| A complaint or refund | Opens a ticket. A refund outside your policy waits for a named person to decide. |
 
-## How replies leave
+Every case shows its facts with the record and field they came from, the policy
+rules it used, its checks and the reviewer's verdict.
 
-- The desk **never writes to ERPNext**. Its connection is read only, and `hubzoid hub doctor` fails if writes are switched on.
-- Replies are **off until you connect a channel**.
-- **Email replies are saved as drafts by default**, in your mailbox or helpdesk, for a person to finish and send there.
-- **WhatsApp has no drafts**, so WhatsApp replies stay off until you turn on approved sending.
-- **Approved sending** (`approve` mode, off by default): Hubzoid sends only after the person who asked approves the exact reply, recipients and attachments on the Work items page. Just before sending it rereads every ERPNext fact the reply uses. If anything changed, it refuses and drafts a new revision.
-- With **Zoho**, the desk adds tags, private source evidence and an unsent draft after readback. With **Freshdesk**, tags and evidence are written server-side and the checked suggestion is available in its native app. An operator explicitly replaces editor text. Placement is not proof of a saved draft. Neither integration sends, closes or assigns a ticket.
+## Inside your helpdesk
 
-There is no automatic sending in this release.
+- **Zoho Desk:** the desk tags the ticket, adds a private note with the facts and
+  their sources, and leaves the reply as an unsent draft after reading it back.
+- **Freshdesk:** tags and source evidence are written to the ticket, and the
+  checked reply appears in the Customer Desk app inside the ticket. The agent
+  inserts it into the editor with one explicit confirmation.
 
-## Run the existing synthetic ERP sample
+Your team sends the reply in the helpdesk. The desk never sends, closes or
+assigns a ticket. `./desk stop-writes on` blocks every helpdesk write at once.
 
-You need Python 3.11/3.12 and a tested Hubzoid 2.0 revision, with your selected installed runtime configured. Record the exact pin and authentication used. Promotion requires a tagged SDK release. No setup-time guarantee of elapsed time or unattended subscription use is implied.
+## Get your first useful result
 
-The one prompt for Claude Code or Codex:
-
-> Set up the Customer Desk from this folder on the synthetic distributor. Install Hubzoid, run the hub doctor, load the twenty sample customer requests, and show me what the desk proposes for each and why. Stop before anything is sent.
-
-The same steps by hand:
+You need Python 3.11 or 3.12, Git, and Claude Code or Codex signed in on this
+machine.
 
 ```bash
+git clone https://github.com/hubzoid/customer-desk-hub customer-desk
+cd customer-desk
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements-sdk.txt -r requirements.txt
 export DESK_PYTHON="$PWD/.venv/bin/python"
 ```
 
-Use Python 3.11 or 3.12 for `python3` and have Git installed for the immutable SDK requirement. This installs SDK commit `c4bf1dbeaf0e498c364bfa1b1b97f10c7ae3c60c`, not a moving branch. The pin is development evidence, with a tagged SDK release still required for promotion.
+The desk runs on Claude Code by default. For Codex, set `MODEL=codex-local` in
+the hub's `.env`.
+
+Connect your helpdesk. Preview the configuration, then repeat with `--apply`
+after reviewing the diff:
 
 ```bash
-.venv/bin/python -m hubzoid hub doctor .
+python scripts/setup_support.py --provider freshdesk --company 'Your Company' \
+  --department 123 --api-base https://company.freshdesk.com/api/v2
 ```
 
-```bash
-HUBZOID_SCHEDULES=1 .venv/bin/python -m hubzoid run . --port 8721
-```
+Zoho uses `--provider zoho_desk` and its regional API base. Add your approved
+articles under `knowledge/support/`, store the helpdesk credentials with
+`python -m hubzoid secrets set . --name NAME --stdin`, then run the desk on one
+real ticket:
 
 ```bash
-./desk sample load --wait 900
+python -m hubzoid hub doctor .
+HUBZOID_SCHEDULES=1 python -m hubzoid run .
 ```
 
+In a second terminal, with the same environment activated:
+
 ```bash
+./desk ticket TICKET_ID
 ./desk list
 ```
 
-Open the web app at http://127.0.0.1:8721 and ask: "What is waiting on the desk?" or "Show CD-000007".
+The first runs are dry-run: the desk records exactly what it would write. When
+you are ready, set `DESK_HELPDESK_MODE: live` and `DESK_HELPDESK_DRAFTS: true`.
+Freshdesk also needs its app from `freshdesk-app/` installed and each agent
+linked; see the [Freshdesk guide](docs/helpdesk-freshdesk.md).
+[Full setup →](docs/setup-support.md)
 
-What you should see, on labelled synthetic data for Synthetic Meridian Distribution:
+<details>
+<summary>Try the labelled sample with ERPNext data</summary>
 
-- six order status answers: three orders on track, one late order with a delivery ticket, one order still a draft and so not confirmed, one cancelled order
-- four invoice copies with the ERPNext print attached, one found from the customer's own order number
-- two open-invoice statements
-- three price and availability answers: a customer's contract price, an item out of stock in the main warehouse, and a disabled item the desk will not quote
-- two delivery changes: one proposal for the delivery team, one explained as already delivered
-- three complaints logged as tickets, one refund above the policy amount waiting for the exception team to decide
+Twenty customer requests to a fictional distributor, Synthetic Meridian
+Distribution, answered from a sample ERPNext. Paste into Claude Code or Codex:
 
-Every case shows its facts with the ERPNext record and field they came from, the policy rules it used, all ten checks and the reviewer's verdict. Nothing is sent.
+```text
+Set up the Customer Desk from this folder on the synthetic distributor. Install
+Hubzoid, run the hub doctor, load the twenty sample customer requests, and show
+me what the desk proposes for each and why. Stop before anything is sent.
+```
 
-`desk sample load --adversarial` loads six harder messages from the same dataset: an unknown sender, which waits for a binding before anything is read, a request for another customer's invoice, which reads as not found, two attempts to give the desk instructions, which it ignores and flags, a statement for every year since 1990, and a question resent on a new thread.
+Or by hand, after the install above:
 
-The sample data is the `distributor-v1` dataset of the Order & Invoice Desk's ERP module, which this hub carries as an exact copy of its read parts (see [ARCHITECTURE.md](ARCHITECTURE.md#erpnext)).
+```bash
+.venv/bin/python -m hubzoid hub doctor .
+HUBZOID_SCHEDULES=1 .venv/bin/python -m hubzoid run . --port 8721
+```
+
+In a second terminal:
+
+```bash
+./desk sample load --wait 900
+./desk list
+```
+
+Open http://127.0.0.1:8721 and ask *"What is waiting on the desk?"* or *"Show
+CD-000007"*. You see six order status answers, including a late order with a
+delivery ticket, four invoice copies with the ERPNext print attached, two
+open-invoice statements, three price and availability answers, two delivery
+changes, and three complaints, one a refund above the policy amount waiting for
+the exception team. `./desk sample load --adversarial` adds six harder messages:
+an unknown sender, another customer's invoice, two attempts to give the desk
+instructions, a statement since 1990 and a resent question.
+
+</details>
+
+## How replies leave
+
+- **In your helpdesk**, the reply waits for a person: an unsent draft in Zoho
+  Desk, the checked suggestion in Freshdesk. A person sends it there.
+- **Approved sending** (`approve` mode, off by default) applies to Hubzoid
+  channels: Hubzoid sends a text reply only after the person who asked approves
+  the exact reply and recipients on the Work items page. A reply with an
+  attachment, such as an invoice copy, is sent by a person.
+- **Just before an approved reply goes out**, the desk rereads every fact it
+  uses. If anything changed, it refuses and drafts a new revision.
+- **The desk never writes to ERPNext.** Its connection is read only, and
+  `hubzoid hub doctor` fails if writes are switched on.
 
 ## Make it yours
 
-- **Your policy**: edit `knowledge/desk-policy.md`. The settings at the top are enforced in code, the numbered rules are cited by the desk. `./desk policy validate` lists every problem with its line and the settings your file leaves to defaults. See [docs/policy-authoring.md](docs/policy-authoring.md).
-- **Your reply style**: edit `knowledge/customer-messages.md`, with three to five of your best past replies and an approved template per outcome.
-- **A correction**: in chat, "Never give customers exact stock numbers. Say in stock, limited or out of stock, with limited meaning fewer than 20 units." The desk proposes the policy change as a reviewed hub change. Apply it, rerun a case, and the next reply follows it, also after a restart.
-- **Your ERPNext**: set `connectors/erpnext.yaml` to `backend: frappe_rest` with a read-only API key, then apply it with `./desk erp-configure`. See [docs/erp-permissions.md](docs/erp-permissions.md).
-- **Your helpdesk**: [Zoho](docs/helpdesk-zoho.md) or [Freshdesk](docs/helpdesk-freshdesk.md), with the [ERP-free setup path](docs/setup-support.md).
-- **Your senders**: import who speaks for which customer with `./desk bindings import --file contacts.csv --dry-run`. See [docs/bindings.md](docs/bindings.md).
+- **Your knowledge:** approved support articles in `knowledge/support/`, with
+  their sources.
+- **Your policy:** `knowledge/desk-policy.md`. The settings at the top are
+  enforced in code, and the numbered rules are cited by the desk.
+  `./desk policy validate` lists every problem with its line.
+  [Policy authoring →](docs/policy-authoring.md)
+- **Your reply style:** `knowledge/customer-messages.md`, with three to five of
+  your best past replies and an approved template per outcome.
+- **A correction:** in chat, *"Never give customers exact stock numbers. Say in
+  stock, limited or out of stock, with limited meaning fewer than 20 units."*
+  The desk proposes the policy change as a reviewed Hub change. A hub manager
+  applies it, and the next reply follows it, also after a restart.
+- **Your ERPNext:** run `scripts/setup_support.py` with `--erp`, set
+  `connectors/erpnext.yaml` to `backend: frappe_rest` with a read-only API key,
+  then apply it with `./desk erp-configure`.
+  [ERP permissions →](docs/erp-permissions.md)
+- **Your senders:** import who speaks for which customer with
+  `./desk bindings import --file contacts.csv --dry-run`.
+  [Bindings →](docs/bindings.md)
 
 ## The team
 
-Roles are granted per person in Settings, Agents, this agent, Access: desk operator, delivery team, complaints team, exception decisions and sender bindings. See [docs/operator-guide.md](docs/operator-guide.md).
+Roles are granted per person in **Settings → Agents → this agent → Access**: desk
+operator, editor, delivery team, complaints team, exception decisions and sender
+bindings. Customers never sign in and can never approve anything.
+[Operator guide →](docs/operator-guide.md)
 
 ## Evals
 
-`python tests/customer_eval.py --runtime claude-local --runs 4` runs the twenty requests, the dataset's six adversarial messages, twelve multi-turn conversations and six safety cases, each in a fresh copy of the hub, and reports pass^1 to pass^4. The method follows Sierra's tau-bench: graded on the final state and the facts delivered, repeated to measure consistency. These are release gates on synthetic data, not a measure of quality on your data. See [docs/evals.md](docs/evals.md).
+```bash
+python tests/customer_eval.py --runtime claude-local --runs 4
+```
 
-## More
+Runs the twenty requests, six adversarial messages, twelve multi-turn
+conversations and six safety cases, each in a fresh copy of the hub, and reports
+pass^1 to pass^4, following Sierra's tau-bench method.
+[Evals →](docs/evals.md)
 
-- [ARCHITECTURE.md](ARCHITECTURE.md): how a message becomes a case, the stations, the checks, the write modes.
-- [demo/PROMPT.md](demo/PROMPT.md), [demo/CALL-SCRIPT.md](demo/CALL-SCRIPT.md) and `demo/reset`: the one prompt, a ten minute call, and starting again.
-- [docs/errors.md](docs/errors.md): every error code and what to do.
-- [docs/metrics.md](docs/metrics.md): what the measures count.
-- [.claude/skills/setup-customer-desk/SKILL.md](.claude/skills/setup-customer-desk/SKILL.md): setup steps for Claude Code and Codex. It sits outside `skills/` so the desk's own chat assistant does not load builder instructions.
+## Go further
 
-Need it running for your team? Build with us: https://hubzoid.com (link to the Build with us page, to confirm before publishing).
+| Next step | Guide |
+|---|---|
+| Set up from your own material | [Setup](docs/setup-support.md) |
+| Connect Zoho Desk or Freshdesk | [Zoho Desk](docs/helpdesk-zoho.md), [Freshdesk](docs/helpdesk-freshdesk.md) |
+| Write your policy | [Policy authoring](docs/policy-authoring.md) |
+| Connect ERPNext read only | [ERP permissions](docs/erp-permissions.md) |
+| Run the desk day to day | [Operator guide](docs/operator-guide.md) |
+| Look up an error or a measure | [Errors](docs/errors.md), [metrics](docs/metrics.md) |
+| How a message becomes a case | [Architecture](ARCHITECTURE.md) |
 
-Apache-2.0. ERPNext is a separate GPL-3.0 application. None of its code is in this hub.
+The Customer Desk is **Apache-2.0**. ERPNext is a separate GPL-3.0 application,
+and none of its code is in this hub. Built on [Hubzoid](https://github.com/hubzoid/hubzoid).
+Need it running for your team? [Build with us](https://hubzoid.com/enterprise).

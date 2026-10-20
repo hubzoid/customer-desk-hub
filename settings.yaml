@@ -63,7 +63,7 @@ settings:
     maximum: 1
     default: 0.75
   - name: DESK_HELPDESK
-    description: "none, or zoho_desk to take tickets in from Zoho Desk and write tags, a private note and an unsent draft back."
+    description: "none; zoho_desk to take tickets in from Zoho Desk and write tags, a private note and an unsent draft back; or freshdesk to write tags and source evidence and offer the checked reply in the Freshdesk app."
     enum: [none, zoho_desk, freshdesk]
     default: none
   - name: DESK_HELPDESK_MODE
