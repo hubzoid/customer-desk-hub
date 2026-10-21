@@ -2,7 +2,7 @@
 
 Status: Draft, pending human approval. No implementation is authorized.
 Proposed destination: `customer-desk-hub/proposals/2026-10-20-helpdesk-context-and-drafts.md`.
-Companion: [Ready-made hubs common contract](2026-10-20-ready-hubs-common-contract.md).
+Companion: [Ready-to-use hubs common contract](2026-10-20-ready-hubs-common-contract.md).
 
 ## Problem
 
