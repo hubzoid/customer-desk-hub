@@ -1,2 +1,0 @@
-# Immutable development evidence pin. Promotion needs a qualified tagged SDK release.
-hubzoid @ git+https://github.com/hubzoid/hubzoid@c4bf1dbeaf0e498c364bfa1b1b97f10c7ae3c60c

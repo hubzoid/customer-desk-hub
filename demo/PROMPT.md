@@ -9,7 +9,7 @@ The agent follows `.claude/skills/setup-customer-desk/SKILL.md`. It never enters
 ## The same steps by hand
 
 ```bash
-python -m venv .venv && .venv/bin/pip install "hubzoid @ git+https://github.com/hubzoid/hubzoid@main" -r requirements.txt
+python -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
 ```bash

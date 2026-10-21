@@ -16,7 +16,7 @@ You are helping a builder set up the Customer Desk from this hub folder. Work in
 
 ## First result on the sample
 
-1. `python3 -m venv .venv`, `source .venv/bin/activate`, then `python -m pip install -r requirements-sdk.txt -r requirements.txt`. Export `DESK_PYTHON="$PWD/.venv/bin/python"`. The SDK is pinned; do not install moving main.
+1. `python3 -m venv .venv`, `source .venv/bin/activate`, then `python -m pip install -r requirements.txt`, which installs Hubzoid 2.0 or later. Export `DESK_PYTHON="$PWD/.venv/bin/python"`.
 2. `python -m hubzoid hub doctor .` Every check should pass except `desk-roles`, which warns until people hold the desk roles. Say "Sample mode. ERPNext backend sample, read only. Replies go to the sample outbox only."
 3. Start the hub: `HUBZOID_SCHEDULES=1 python -m hubzoid run . --port 8721`.
 4. `./desk sample load --wait 900` loads the twenty synthetic requests. If a station cannot reach the model, cases wait at `triaging` with `model_auth_required`: sign in to the configured runtime and rerun.

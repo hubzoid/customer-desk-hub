@@ -67,7 +67,7 @@ git clone https://github.com/hubzoid/customer-desk-hub customer-desk
 cd customer-desk
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-sdk.txt -r requirements.txt
+python -m pip install -r requirements.txt
 export DESK_PYTHON="$PWD/.venv/bin/python"
 ```
 

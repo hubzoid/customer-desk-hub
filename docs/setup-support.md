@@ -5,11 +5,11 @@ From this hub folder, use Python 3.11/3.12 and Git to create the environment and
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-sdk.txt -r requirements.txt
+python -m pip install -r requirements.txt
 export DESK_PYTHON="$PWD/.venv/bin/python"
 ```
 
-`requirements-sdk.txt` pins `c4bf1dbeaf0e498c364bfa1b1b97f10c7ae3c60c`. It does not track main. See provider-qualification.md for evidence and remaining qualification. Promotion still needs a tagged SDK release. Use `python -m hubzoid` rather than a relocated virtualenv entry-point shebang. `./desk` uses the actual interpreter specified above.
+`requirements.txt` installs Hubzoid 2.0 or later and the desk's one library. Use `python -m hubzoid` rather than a relocated virtualenv entry-point shebang. `./desk` uses the actual interpreter specified above.
 
 Claude Code/Cowork or Codex can perform file/CLI setup where their actual capabilities allow. No Hubzoid UI setup is required. Provider consent, secure credential entry and human approvals remain personal actions. The current SDK does not supply a new non-delegable setup identity. The operating-system owner remains trusted.
 
