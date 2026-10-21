@@ -1,6 +1,6 @@
 """Compare the vendored ERP module with its canonical commit.
 
-    python scripts/check_vendored_erp.py ../order-invoice-desk-hub
+    python scripts/check_vendored_erp.py ../order-desk-hub
 
 Reads the source commit from workflows/lib/erp/VENDORED.md, exports that
 commit's erp/ with git, and compares every file byte for byte. Prints each

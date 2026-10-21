@@ -6,9 +6,9 @@ new copy replaces this folder and this file.
 
 | | |
 |---|---|
-| Canonical module | `hubzoid/order-desk-hub:erp/` (`erp.CANONICAL` retains the legacy module name) |
-| Source commit | `a3c3993135ebffa2c291dac3a7780be46f7bf796` |
-| Copied on | 20 Oct 2026 |
+| Canonical module | `hubzoid/order-desk-hub:erp/` |
+| Source commit | `d355c4122157c940ec94fb8ffa18a0aa373fb3f3` |
+| Copied on | 21 Oct 2026 |
 | Left out | `write.py`, `digest.py`, `bootstrap.py`: the write contract. The Customer Desk never writes to ERPNext and mounts no ERP write tool |
 
 The desk reaches this module only through `workflows/lib/customer_desk/erpnext/`,
@@ -23,7 +23,7 @@ Coordinated canonical update: `service.py` and `config.py` include the 20 Octobe
 | File | SHA-256 |
 |---|---|
 | `README.md` | `sha256:5cbe8a6d957572cda68c762e6a126e87ac156c86ba180ecf1e8ebd3aab9a0723` |
-| `__init__.py` | `sha256:de7b71650d0e1b4fefe30c1f41282b13641e077a62acbeb17402aff2d90fe956` |
+| `__init__.py` | `sha256:b2bb90fe910abcddd7be9dbf7f70eec9381664b37f8409c7eb2824051f0ab484` |
 | `backends/__init__.py` | `sha256:8184e60bb7d4c9fd43c7ab7d1a268021122208bc07bfc3394aed191e16583a2f` |
 | `backends/frappe_rest.py` | `sha256:989015e88488f10ee3e10b1fafcbc9d113ac63d9e5924efb016d9686df46bd90` |
 | `backends/sample.py` | `sha256:26a89ea856f0ddef57434fea7429e086d89f2b5b04c17b20fede9c22b0417a8d` |

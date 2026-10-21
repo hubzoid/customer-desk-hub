@@ -86,7 +86,7 @@ The desk's own records live in `.hubzoid/data/customer-desk.sqlite` in the hub's
 
 ## ERPNext
 
-The ERP code is the Order & Invoice Desk's canonical module (decision B042). `workflows/lib/erp/` is a byte-for-byte copy of its read parts and its `distributor-v1` dataset, taken from order-invoice-desk-hub commit 4c37c70. `erp/VENDORED.md` names the commit, lists what was left out (`write.py`, `digest.py`, `bootstrap.py`) and holds a sha256 for every file. `tests/test_vendored_erp.py` fails if any byte differs, if the dataset no longer matches its own manifest, or if the write contract comes back. `scripts/check_vendored_erp.py` compares the copy with the canonical commit itself. A bug found in the copy is fixed once in the canonical module and copied again, never patched here.
+The ERP code is the Order & Invoice Desk's canonical module (decision B042). `workflows/lib/erp/` is a byte-for-byte copy of its read parts and its `distributor-v1` dataset, taken from an order-desk-hub commit. `erp/VENDORED.md` names the commit, lists what was left out (`write.py`, `digest.py`, `bootstrap.py`) and holds a sha256 for every file. `tests/test_vendored_erp.py` fails if any byte differs, if the dataset no longer matches its own manifest, or if the write contract comes back. `scripts/check_vendored_erp.py` compares the copy with the canonical commit itself. A bug found in the copy is fixed once in the canonical module and copied again, never patched here.
 
 The desk reaches the module only through `workflows/lib/customer_desk/erpnext/`:
 
