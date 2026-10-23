@@ -1,9 +1,9 @@
 # Support from your own material
 
-From this hub folder, use Python 3.11/3.12 and Git to create the environment and install the exact SDK development pin plus the hub dependency:
+From this hub folder, use Python 3.11 or 3.12 and Git to create the environment and install Hubzoid and the desk's one library. Claude Code or Codex can do all of this by following `skills/setup-customer-desk/SKILL.md`.
 
 ```sh
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 export DESK_PYTHON="$PWD/.venv/bin/python"

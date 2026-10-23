@@ -26,6 +26,7 @@ DRAFT for review. Every refusal has a stable code, a safe message and the next s
 | `recipient_changed` | The helpdesk ticket's contact is no longer the case's bound sender. No draft was written. | Check the ticket in the helpdesk. |
 | `request_failed` | A send or draft request did not reach Hubzoid. Nothing was sent. | Ask again. |
 | `checks_failed` | The reply fails a check. | Edit it or rerun. |
+| `review_hold` | The reviewer asked for changes, so the reply cannot leave the desk: no helpdesk draft, editor suggestion, mailbox draft or send. | Edit the reply. Your edit is a new revision with its own checks. |
 | `plan_required` | An escalated case needs a reviewed plan before a send. | Share a plan for the complaints team. |
 | `plan_stale` | The plan waiting for review is not the version you read. | Read the current plan on the case and review that one. |
 | `write_mode_off`, `write_mode_draft` | The channel's reply mode does not allow this. | Change `customer_reply.send` in `work-items.yaml`. |

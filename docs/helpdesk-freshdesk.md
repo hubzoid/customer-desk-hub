@@ -1,25 +1,57 @@
-# Freshdesk native editor
+# Freshdesk
 
-The REST adapter reads tickets/conversations, fetches documented resolved-status/group facets and ranks bounded candidates lexically. It adds namespaced tags and private evidence notes. It has no send endpoint. Notes are never drafts.
+With Freshdesk connected, the desk reads each ticket, adds tags and a private note with the facts and their sources, and shows the checked reply in a Customer Desk app inside the ticket. An agent inserts it into the reply editor with one explicit confirmation and sends it from Freshdesk. The desk never sends, closes or assigns a ticket.
 
-A Freshdesk administrator packages freshdesk-app/ with supported Freshworks custom-app tooling and installs the ticket-sidebar app. Configure the trusted Hubzoid HTTPS hostname and MCP path. Enable the SDK's existing OAuth MCP surface/canonical public URL. The app uses public-client PKCE sign-in and Freshworks request templates, with no static browser service credential or cached payload response. The person consents in the Hubzoid popup. Every request checks the verified account link, current grants and provider ticket scope.
+## Set it up
 
-The public client ID is reused per MCP resource and callback URI in browser storage; it is not a credential. Access and rotating refresh tokens remain in memory only. Concurrent expired requests share one refresh operation. Closing the app requires another sign-in, reusing that client registration where storage is allowed. A 401/403 is shown as sign-in/access recovery rather than a blank message. A tenant that blocks browser storage may reuse registration only within the current frame; verify storage access before promoting that tenant path.
+1. **Configure the hub.** Preview, then repeat with `--apply` after reading the diff:
 
-Open the ticket, sign in and choose **Show current suggestion**. App opening never changes editor text. Choose **Replace editor with this suggestion** only when wanted. Its confirmation explicitly warns that existing text, including a human draft, will be lost. Cancel preserves it. Recheck ticket/message, link, grants, source revisions and digest at the click. Review/edit/send personally in Freshdesk. Placement is acknowledged as awaiting_provider_confirmation and never reinserted automatically.
+   ```sh
+   python scripts/setup_support.py --provider freshdesk --company 'Your Company' \
+     --department 123 --api-base https://company.freshdesk.com/api/v2
+   ```
 
-Confirmation uses ordinary inline controls inside the app, avoiding native browser modal restrictions. Freshworks documents `click` with `id: reply` and text as replacing existing editor text. The app sends escaped HTML paragraphs and line breaks through this interface; it does not use an undocumented sidebar `setValue`. Claiming requires the exact confirmed digest, so a newer suggestion is refused before placement is claimed.
+2. **Store the API key.** Create a dedicated, restricted Freshdesk integration agent. A person enters its key, never in chat or a file:
 
-The documented App SDK provides insertion but no editor/draft persistence readback. This build never calls placement draft_saved. Browser restart, concurrency and persistence need real-tenant acceptance. Persisted native-draft support remains unqualified without provider evidence.
+   ```sh
+   python -m hubzoid secrets set . --name FRESHDESK_API_KEY --stdin
+   ```
 
-For an invoice copy, the app shows an authenticated **Download PDF, then attach in Freshdesk** action. It reads only the checked current reply's stored PDF through the same ticket/link/grant/evidence checks and verifies its digest. It creates no new file store or provider upload. Download and attach personally in the native reply editor before sending. Body placement stays `requires_manual_attachment`, with attachment delivery and persistence unverified. Zoho retains its existing native attachment path.
+3. **Give the hub a public HTTPS address.** The app signs in to Hubzoid from the agent's browser, so the hub needs `HUBZOID_PUBLIC_URL` set to an HTTPS address Freshdesk can reach, with Hubzoid's MCP sign-in turned on.
 
-Placement is claimed atomically at the confirmed button click. Another operator receives no insertion payload while a claim exists. The acknowledgement requires its opaque claim token and actor. A crash or unknown outcome never expires/replays automatically. After inspecting the actual provider editor, an administrator runs `./desk editor-reconcile TICKET_ID not_inserted` or `placed` in their own terminal and confirms. Neither decision claims provider persistence or attachment upload.
+4. **Grant the operator and link their Freshdesk agent.** Use the operator's real Hubzoid account and their Freshdesk agent id:
 
-Revoked/unlinked callers receive no payload. The server rereads the Freshdesk agent and enforces ticket_scope/group/assignment alongside Hubzoid grants. Local machine ownership remains the SDK's trusted administration boundary.
+   ```sh
+   python -m hubzoid grant operator@company.example desk_operator .
+   python -m hubzoid grant operator@company.example desk_editor .
+   ./desk editor-link --agent-id 456 --principal operator@company.example
+   ```
 
-Qualification must exercise popup permission and inherited iframe sandbox behaviour, consent cookies, callback origin/postMessage, public registration reuse and refresh after access-token expiry, request-template limits, existing-draft replacement/formatting, `loggedInUser.id` against the linked agent, contact deactivation and tenant-required tag-update fields. Tag updates preserve tags observed in two reads, but Freshdesk's documented whole-array update has no proven atomic append here: a human edit between the final read and PUT can race. Do not claim conflict-free tag writes until the tenant/provider supports and passes that check. Native searches and payload rechecks make multiple bounded GETs; rate limits and proxy timeouts remain tenant acceptance items.
+5. **Install the app.** A Freshdesk administrator packages `freshdesk-app/` with Freshworks' app tooling (`fdk pack`) and installs it as a ticket sidebar app. In its settings, enter the hub's HTTPS hostname (no scheme or path) and the MCP path, `/mcp` or `/b/<hub>/mcp`.
 
-Polling is the default intake. Optional webhook automation sends POST to the SDK's `/webhooks/HUB_SLUG/freshdesk` route, with `X-Webhook-Secret` equal to the operator's `WEBHOOK_SECRET_FRESHDESK` environment secret. Configure a JSON body with numeric `ticket_id`, an `event` identifier and stable `fired_at` timestamp for retries, for example `{"ticket_id":42,"event":"ticket_updated","fired_at":"2026-10-20T12:00:00Z"}`. The SDK event key combines those fields; the desk ignores all supplied ticket text and rereads the API. `HUB_SLUG` is the deployment's actual webhook slug. Webhook automation capability/scopes and its real route remain unqualified; polling does not require it.
+6. **Try one ticket in dry-run.** Start the hub with `HUBZOID_SCHEDULES=1 python -m hubzoid run .`, then run `./desk ticket TICKET_ID` and read `./desk ledger`: it lists what the desk would write.
 
-Sources checked 20 October 2026: [REST](https://developers.freshdesk.com/api/), [interface methods](https://developers.freshworks.com/docs/app-sdk/v3.0/support_ticket/front-end-apps/interface-methods/), [data methods](https://developers.freshworks.com/docs/app-sdk/v3.0/support_ticket/front-end-apps/data-method/), [request methods](https://developers.freshworks.com/docs/app-sdk/v3.0/support_email/advanced-interfaces/request-method/). API documentation does not establish tenant qualification.
+7. **Go live when you are ready.** Set `DESK_HELPDESK_MODE: live` and `DESK_HELPDESK_DRAFTS: true` in `hub.settings.yaml` and restart. Keep `customer_reply.send: draft`. `./desk stop-writes on` blocks every Freshdesk write at once.
+
+## Using it on a ticket
+
+1. Open the ticket and the Customer Desk app, sign in and choose **Show current suggestion**. Opening the app never changes the editor.
+2. Choose **Replace editor with this suggestion**. The app warns that the editor's current text, including a draft a person wrote, will be replaced. Cancel keeps it.
+3. The desk rechecks the ticket, your link, your access and the reply at the click, then places the reply.
+4. For an invoice copy, choose **Download PDF, then attach in Freshdesk** and attach it yourself before sending.
+5. Read, edit and send in Freshdesk.
+
+## How it works, and its limits
+
+- **Reading.** The REST adapter reads tickets and conversations and ranks a small set of resolved tickets as precedent. It writes only namespaced tags and private notes. It has no send endpoint.
+- **Sign-in.** The app uses a public OAuth client with PKCE. Access and refresh tokens stay in memory. Only the public client id is kept in browser storage. Expired requests share one refresh. A 401 or 403 is shown as a sign-in or access message.
+- **Placement.** The app uses Freshworks' documented `click` with `id: reply`, which replaces the editor text, and sends escaped HTML (paragraphs, lists and tables). Freshworks gives no way to read back whether the editor content was saved, so the desk reports `awaiting_provider_confirmation` and never claims the draft was saved.
+- **One placement at a time.** Placement is claimed at the click. Another operator gets nothing to insert while a claim exists. A crash or an unknown outcome is never replayed. After looking at the ticket, an administrator runs `./desk editor-reconcile TICKET_ID not_inserted` or `placed`.
+- **Tags.** Freshdesk replaces the whole tag list on update. The desk keeps tags it saw in two reads, but a person's edit between its last read and its write can be lost.
+- **Intake.** Polling is the default. An optional webhook posts to `/webhooks/HUB_SLUG/freshdesk` with `X-Webhook-Secret` set to `WEBHOOK_SECRET_FRESHDESK` and a JSON body such as `{"ticket_id":42,"event":"ticket_updated","fired_at":"2026-10-20T12:00:00Z"}`. The desk ignores any ticket text in the body and rereads the API.
+
+## Not yet run on a real Freshdesk
+
+Popup and iframe behaviour, consent cookies, the callback origin, token refresh after expiry, request-template limits, replacing an existing draft, the signed-in agent matching the linked agent, rate limits and webhooks all need a real tenant. See [what has been run](provider-qualification.md).
+
+Sources checked 20 October 2026: [REST](https://developers.freshdesk.com/api/), [interface methods](https://developers.freshworks.com/docs/app-sdk/v3.0/support_ticket/front-end-apps/interface-methods/), [data methods](https://developers.freshworks.com/docs/app-sdk/v3.0/support_ticket/front-end-apps/data-method/), [request methods](https://developers.freshworks.com/docs/app-sdk/v3.0/support_email/advanced-interfaces/request-method/).

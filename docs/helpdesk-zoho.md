@@ -1,6 +1,6 @@
 # Zoho Desk
 
-Zoho implementation. Real-tenant qualification remains recorded in provider-qualification.md. Freshdesk now has its own native-editor integration, documented in helpdesk-freshdesk.md. Zendesk is outside this build.
+What has been run against a real Zoho Desk is in [provider-qualification.md](provider-qualification.md). Freshdesk has its own guide, [helpdesk-freshdesk.md](helpdesk-freshdesk.md). Zendesk is not supported.
 
 With Zoho Desk connected, tickets live in Zoho Desk and your team sends from there. For each new customer message the desk:
 
