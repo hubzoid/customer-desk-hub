@@ -4,9 +4,8 @@
 #   demo/reset --files   also restore knowledge/desk-policy.md, knowledge/customer-messages.md and work-items.yaml from Git
 set -e
 cd "$(dirname "$0")/.."
-PY=.venv/bin/python
-[ -x "$PY" ] || PY=python3
-"$PY" desk sample reset
+# ./desk picks the interpreter: DESK_PYTHON, then .venv, then python3.
+./desk sample reset
 if [ "$1" = "--files" ]; then
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "Not a Git checkout, so the files cannot be restored. Copy them from a fresh clone." >&2

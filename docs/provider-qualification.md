@@ -1,56 +1,43 @@
-# Customer Desk evidence and remaining qualification
+# What has been run, and what has not
 
-Build checkout: base `35068825` (abbreviated). SDK inspected/used for completed focused tests: `c4bf1dbeaf0e498c364bfa1b1b97f10c7ae3c60c`. Runtime Python: the existing Customer Desk virtualenv interpreter, Python 3.12.6. No new environment, container or paid resource was created.
+This page records what the Customer Desk has been run against, on what, and with what result. A row that has not been run is not a support claim.
 
-Completed before the laptop RAM restriction: 28 focused policy, binding and Zoho HTTP tests passed. The first sandboxed run had 9 loopback-bind errors, then the identical focused set passed with local synthetic-server permission. These are synthetic HTTP tests, not real-tenant/model proof. Compilation succeeded before later light edits. No further test/browser/model process is launched while the coordinating parent serializes checks.
+## Run so far
 
-The coordinating parent subsequently ran the pre-review build: 121 full offline tests passed with no skips, then four final ACL-cycle/polling checks passed. Independent Claude Opus 5.5 reviewed commit `e98b7a1`. See REVIEW-2026-10-20.md for dispositions. Necessary review fixes passed 50 focused checks and the Node app harness, then 142 broader checks. After the final ERP mirror, 143 tests passed with no skips against the exact c4bf1dbe SDK source (116.70 s). Hub doctor reports ok with the expected missing-role warning. Initial runs used the additive f99a224 SDK checkout; the final exact-pin run closes that difference.
-
-## Implemented scope
-
-- General support without ERP, approved scoped articles, conversation evidence and bounded resolved-answer retrieval, cited drafting and independent applicability review.
-- Existing six ERP jobs and sample defaults retained, with explicit support/ERP switches.
-- Zoho unsent draft creation with readback and conservative preflight. Freshdesk reads, namespaced tags/private evidence notes and native-editor app using existing MCP OAuth+PKCE and scoped verified account links.
-- Freshdesk operator-confirmed replacement, atomic placement claims, protected existing-case PDF download/manual attach, human CLI reconciliation and explicit uncertain/pending states. No automatic app-open insertion, send endpoint or invented persistence proof.
-- Per-case ACL refresh state and immediate retirement of all stale case artifact copies, including beyond one refresh batch. Canonical coordinated ERP data-root/initialization updates, inherited station runtime and interpreter-aware launcher.
-- Trusted-host assistant setup, existing SDK Hub-change corrections and builder-checkout redeployment for read-only source.
-
-## Required qualification matrix
-
-Both real Zoho and Freshdesk are required on every row, for ERP-free support and optional scoped ERP enrichment under the approved build proposals. All real rows remain **not run**, because live customer connections and paid provider resources were not authorized for this build.
-
-| Host | Sole runtime | Authoring setup | Real provider result |
+| Date | Setup | Data | Result |
 |---|---|---|---|
-| Local | Claude | Claude Code and Cowork separately | Not run |
-| Local | Codex | Codex | Not run |
-| Railway | Claude | Claude Code | Not run |
-| Railway | Codex | Codex | Not run |
-| Maritime | Claude | Cowork | Not run |
-| Maritime | Codex | Codex | Not run |
+| 23 October 2026 | Local Mac, Hubzoid 2.0.1 from PyPI, installed from this README. Claude Code sign-in (`claude-local`), a real model. | The labelled synthetic distributor and the sample ERP backend. | All twenty sample requests matched `evals/expected/customer-desk-20.json` in one run (load to twenty cases ready in 3 minutes 19 seconds). All six adversarial messages handled safely. A policy correction applied as a Hub change changed the next reply, also after a restart. An approved send to the sample outbox was refused as stale after the policy changed, redrafted and sent after approval. |
+| 23 October 2026 | Same | Same | Bugs found and fixed in this release: `demo/reset` failed, a reviewer's "revise" verdict did not stop a reply, sample replies showed the read date instead of the sample date, and decline was shown as "approve: false". |
 
-Record exact SDK/hub commit, tagged SDK release for promotion, provider edition/scopes, runtime/model/auth method, costs/limits, own-data result, teammate allowed/denied access, callbacks, restart/custom-data-root persistence, scheduler/recovery, sleep/wake, backup/restore and upgrades. Local subscription sign-in establishes no hosted/shared/unattended compatibility claim.
+Every change also passes the offline tests (`python -m pytest -q`) with scripted stations, a fake mailbox and local fake Zoho and Freshdesk servers. They prove the desk's logic, not a provider.
 
-The native Freshdesk App SDK documents editor insertion but no persistence readback. This implementation reports `awaiting_provider_editor`, an in-progress claimed placement or `awaiting_provider_confirmation`. Persisted native-draft acceptance is unmet until real provider evidence verifies it. An interrupted claim never expires/replays automatically. Inspect the provider before any replacement. This is a documented required qualification gap, not a passing draft check.
+## Not run yet
 
-No FDK packaging, real browser/provider installation, real model, Railway or Maritime journey has run. Synthetic checks cannot establish those combinations. Review resources sequentially to respect laptop memory limits.
+| Host | Runtime | Helpdesk | Status |
+|---|---|---|---|
+| Local | Claude | Zoho Desk trial | Not run |
+| Local | Claude | Freshdesk trial (needs a public HTTPS address for the app) | Not run |
+| Local | Codex | Any | Not run |
+| Railway | Claude or Codex | Any | Not run |
+| Maritime (the second hosting provider Hubzoid documents, next to Railway) | Claude or Codex | Any | Not run |
+| Any | Any | A real ERPNext, read only | Not run |
 
-## Explicit optional deferrals
+The pass^k evals (`tests/customer_eval.py --runs 4`) have not been recorded on Hubzoid 2.0.2 yet.
 
-The monthly proposed-improvement schedule is omitted. Explicit owner corrections and approved knowledge edits deliver the primary first/repeat-use journey. A generic non-delegable setup credential and new approval platform are deferred. The current concrete path trusts the local host owner and reuses existing SDK approvals/access. No new Cowork helper, vector store, shared package or alternate chat application is introduced.
+## Known gaps
 
-## Reproduce offline verification
+- Freshdesk's app SDK can insert a reply into the agent's editor but cannot confirm it was saved. The desk reports `awaiting_provider_editor` or `awaiting_provider_confirmation` and never assumes a save. An interrupted placement is never replayed automatically. Check the ticket before replacing it.
+- Approved sending through a Hubzoid channel sends text only. An invoice copy or other attachment is sent by a person.
 
-Run from a correctly installed checkout, one process at a time:
+## What a row needs before it counts
+
+The hub and Hubzoid versions, the helpdesk edition and scopes, the runtime and how it signs in, cost and limits seen, a useful result on the operator's own material, a teammate allowed and a teammate denied, the callback URLs, a restart with the data kept, scheduled polling and recovery, and for hosted rows sleep and wake, backup and restore, and an upgrade.
+
+## Run the offline checks
+
+One process at a time:
 
 ```sh
-python -m pytest tests/test_support.py tests/test_freshdesk_support.py tests/test_support_safety.py -q
+python -m pytest -q
 node tests/freshdesk_app_harness.cjs
 ```
-
-Then one full hub regression with local synthetic-server permission:
-
-```sh
-python -m pytest -m "" -q
-```
-
-Engine/real-model tests must be inspected individually for prerequisites and actual execution. A critical skip or timeout is not a pass. The coordinating parent runs the independent Claude review and owns commits/PR handoff.

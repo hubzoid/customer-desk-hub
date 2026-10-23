@@ -34,7 +34,29 @@ def _escape(text: str) -> str:
 
 
 def _json(obj) -> str:
+    # A report card shows its sections as plain text, so a \$ would show as is.
+    if isinstance(obj, dict) and obj.get("kind") == "report":
+        return json.dumps(obj, default=str)
     return json.dumps(_money_safe(obj), default=str)
+
+
+def _plain(md: str) -> str:
+    """Reply Markdown as the report card shows it: no emphasis marks, and a
+    table as one "- " line per row ("Invoice: SINV-1, Due: 15 Jan 2000")."""
+    out, header = [], None
+    for line in (md or "").splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")] if line.strip().startswith("|") else None
+        if cells is None:
+            header = None
+            out.append(re.sub(r"(\*\*|__)(.+?)\1", r"\2", line))
+        elif all(re.fullmatch(r":?-{2,}:?", c) for c in cells if c):
+            continue
+        elif header is None:
+            header = cells
+            out.append("")
+        else:
+            out.append("- " + ", ".join(f"{h}: {v}" if h else v for h, v in zip(header, cells)))
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
 
 
 def actor(hub_dir: Path) -> actions.Actor:
@@ -83,16 +105,19 @@ def queue(hub_dir: Path, tab: str, cursor: str | None, customer: str | None) -> 
             "heading": "No customer requests yet",
             "markdown": "Nothing is waiting in this tab. In sample mode, load the sample requests with "
                         "`./desk sample load`. Admins can connect a channel."}], "sources": []})
-    return _json({"kind": "table", "title": f"Customer Desk: {q['tab']} ({q['total']})",
+    waiting = ", ".join(f"{k} {v}" for k, v in sorted(q["counts"].items()) if v)
+    return _json({"kind": "table", "title": f"Customer Desk: {q['tab']} ({q['total']})"
+                  + (f". Open by queue: {waiting}" if waiting else ""),
                   "columns": [{"key": "case", "label": "Case", "type": "string"},
                               {"key": "customer", "label": "Customer", "type": "string"},
                               {"key": "channel", "label": "Channel", "type": "string"},
                               {"key": "categories", "label": "Requests", "type": "string"},
-                              {"key": "state", "label": "State", "type": "string"},
+                              {"key": "state_text", "label": "State", "type": "string"},
                               {"key": "queue", "label": "Queue", "type": "string"},
                               {"key": "assignee", "label": "Claimed by", "type": "string"},
                               {"key": "first_line", "label": "Reply starts", "type": "string"}],
-                  "rows": q["rows"], "page": {"next_cursor": str(q["next_offset"]) if q["next_offset"] else None,
+                  "rows": [{k: v for k, v in r.items() if k not in ("review_hold", "state")} for r in q["rows"]],
+                  "page": {"next_cursor": str(q["next_offset"]) if q["next_offset"] else None,
                                               "total_rows": q["total"]},
                   "sources": [{"label": f"{q['namespace']} cases in the desk store"}]})
 
@@ -107,7 +132,8 @@ def show(hub_dir: Path, case_ref: str) -> str:
     cv = views.compact(view)
     sections = [{"heading": f"{c['number']}: {c['state']}", "markdown": view["state_text"] + (
         f"\n\nDesk notes: {c['note']}" if c.get("note") else "") + (
-        f"\n\nCase page (desk roles only): [{c['number']}]({c['page_url']})" if c.get("page_url") else "")}]
+        f"\n\nCase page (desk roles only): {c['page_url']}" if c.get("page_url") else "")}]
+    page = [{"label": f"{c['number']} case page (desk roles only)", "url": c["page_url"]}] if c.get("page_url") else []
     if c["state"] == "binding_required":
         # No model reads an unbound message, the assistant included: only who
         # wrote and when. People read the text on the case page or in Intake.
@@ -123,15 +149,16 @@ def show(hub_dir: Path, case_ref: str) -> str:
     sections.append({"heading": "Conversation", "markdown": msgs or "No messages."})
     if cv["requests"]:
         sections.append({"heading": "Requests and outcomes", "markdown": "\n".join(
-            f"- {r['no']}. {r['category']}: **{r['outcome']}** (rules {', '.join(r['rules'])})"
+            f"- {r['no']}. {r['category']}: {r['outcome']} (rules {', '.join(r['rules'])})"
             + (f" {' '.join(r['notes'])}" if r["notes"] else "") for r in cv["requests"])})
     if cv["facts"]:
         sections.append({"heading": "Source evidence", "markdown": "\n".join(
-            f"- {f['id']} {f['value'][:160]} ({f['source']}, read {f['observed_at']})" for f in cv["facts"])})
+            f"- {f['id']} {' '.join(f['value'][:160].split())} ({f['source']}, read {f['observed_at']})"
+            for f in cv["facts"])})
     r = cv["reply"]
     if r:
         sections.append({"heading": f"Proposed reply, revision {r['revision']} ({r['author']}, {r['state']})",
-                         "markdown": (r["text"] or "") + (f"\n\nAttachments: {', '.join(r['attachments'])}"
+                         "markdown": _plain(r["text"] or "") + (f"\n\nAttachments: {', '.join(r['attachments'])}"
                                                           if r["attachments"] else "")
                          + (f"\n\nTyped by a person, not checked against ERPNext: {', '.join(r['typed_by_person'])}"
                             if r["typed_by_person"] else "")})
@@ -148,7 +175,11 @@ def show(hub_dir: Path, case_ref: str) -> str:
     items = [f"- Ticket {t['number']}: {t['severity']}, {t['owner']}, {t['state']}. {t['summary']}" for t in cv["tickets"]]
     items += [f"- Delivery proposal {p['id']}: {p['order']} to {p['requested']}, {p['state']}" for p in
               cv["delivery_proposals"]]
-    items += [f"- Decision {d['id']}: {d['kind']}, {d['state']}" + (f" by {d['decided_by']}" if d["decided_by"] else "")
+    latest = cv.get("latest_customer_message")
+    items += [f"- Decision {d['id']}: {d['kind'].replace('_', ' ')}, {d['state']}"
+              + (f", amount asked {d['inputs']['amount_text']}" if (d.get("inputs") or {}).get("amount_text") else "")
+              + (f" by {d['decided_by']}" if d["decided_by"] else "")
+              + (f". To decide, pass customer_message {latest}" if d["state"] == "pending" and latest else "")
               for d in cv["decisions"]]
     if items:
         sections.append({"heading": "Owner items", "markdown": "\n".join(items)})
@@ -160,7 +191,7 @@ def show(hub_dir: Path, case_ref: str) -> str:
             for s in cv["sends"])})
     sections.append({"heading": "What you can do", "markdown": next_steps(hub_dir, view)})
     return _json({"kind": "report", "title": f"Case {c['number']}", "sections": sections,
-                  "sources": [{"label": "Desk store and ERPNext reads"}]})
+                  "sources": page + [{"label": "Desk store and ERPNext reads"}]})
 
 
 def next_steps(hub_dir: Path, view: dict) -> str:

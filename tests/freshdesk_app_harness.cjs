@@ -82,6 +82,9 @@ async function main() {
   assert.equal(claims, 1); assert.equal(acknowledgements, 1);
   assert.equal(inserted[0].name, "click"); assert.equal(inserted[0].args.id, "reply");
   assert.equal(inserted[0].args.text, "<p>&lt;unsafe&gt; &amp; text</p><p>Second paragraph</p>");
-  console.log("Freshdesk app: registration reuse, shared refresh, errors, inline confirmation and escaped placement passed");
+  assert.equal(vm.runInContext("draftHtml('Your statement:\\n\\n| Invoice | Due |\\n|---|---|\\n| SINV-1 | 15 Jan 2000 |\\n| <b> | x |')", sandbox),
+    "<p>Your statement:</p><table border='1' cellpadding='4' cellspacing='0'><tr><th>Invoice</th><th>Due</th></tr>"
+    + "<tr><td>SINV-1</td><td>15 Jan 2000</td></tr><tr><td>&lt;b&gt;</td><td>x</td></tr></table>", "tables become escaped HTML tables");
+  console.log("Freshdesk app: registration reuse, shared refresh, errors, inline confirmation, escaped placement and tables passed");
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

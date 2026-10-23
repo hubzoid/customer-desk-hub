@@ -65,14 +65,23 @@ machine.
 ```bash
 git clone https://github.com/hubzoid/customer-desk-hub customer-desk
 cd customer-desk
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 export DESK_PYTHON="$PWD/.venv/bin/python"
 ```
 
 The desk runs on Claude Code by default. For Codex, set `MODEL=codex-local` in
-the hub's `.env`.
+the hub's `.env`. Keep the folder name lowercase.
+
+Give yourself the desk roles, with your own Hubzoid account (or in Settings,
+Agents, Customer Desk, Access, Restricted tools):
+
+```bash
+for role in desk_operator desk_exceptions desk_delivery desk_complaints desk_bindings; do
+  python -m hubzoid grant you@company.example $role .
+done
+```
 
 Connect your helpdesk. Preview the configuration, then repeat with `--apply`
 after reviewing the diff:
@@ -91,6 +100,8 @@ real ticket:
 python -m hubzoid hub doctor .
 HUBZOID_SCHEDULES=1 python -m hubzoid run .
 ```
+
+If port 8000 is already in use, add `--bridge-port 8722`.
 
 In a second terminal, with the same environment activated:
 
@@ -112,9 +123,10 @@ Twenty customer requests to a fictional distributor, Synthetic Meridian
 Distribution, answered from a sample ERPNext. Paste into Claude Code or Codex:
 
 ```text
-Set up the Customer Desk from this folder on the synthetic distributor. Install
-Hubzoid, run the hub doctor, load the twenty sample customer requests, and show
-me what the desk proposes for each and why. Stop before anything is sent.
+Follow skills/setup-customer-desk/SKILL.md to set up the Customer Desk from this
+folder on the synthetic distributor. Install Hubzoid, run the hub doctor, load
+the twenty sample customer requests, and show me what the desk proposes for
+each and why. Stop before anything is sent.
 ```
 
 Or by hand, after the install above:
@@ -149,7 +161,13 @@ instructions, a statement since 1990 and a resent question.
 - **Approved sending** (`approve` mode, off by default) applies to Hubzoid
   channels: Hubzoid sends a text reply only after the person who asked approves
   the exact reply and recipients on the Work items page. A reply with an
-  attachment, such as an invoice copy, is sent by a person.
+  attachment, such as an invoice copy, is sent by a person. A real mailbox
+  also needs `email.send` set for that channel under `write_mode_overrides`
+  in `work-items.yaml`, and `hubzoid hub doctor .` shows each channel's
+  effective mode.
+- **A reply the reviewer did not pass** stays on the desk, marked "Reviewer
+  asked for changes", until a person edits it. It never becomes a draft or a
+  send.
 - **Just before an approved reply goes out**, the desk rereads every fact it
   uses. If anything changed, it refuses and drafts a new revision.
 - **The desk never writes to ERPNext.** Its connection is read only, and
@@ -183,9 +201,10 @@ instructions, a statement since 1990 and a resent question.
 
 ## The team
 
-Roles are granted per person in **Settings → Agents → this agent → Access**: desk
-operator, editor, delivery team, complaints team, exception decisions and sender
-bindings. Customers never sign in and can never approve anything.
+Roles are granted per person in **Settings, Agents, Customer Desk, Access,
+Restricted tools**, or with `python -m hubzoid grant EMAIL desk_operator .`:
+desk operator, editor, delivery team, complaints team, exception decisions and
+sender bindings. Customers never sign in and can never approve anything.
 [Operator guide →](docs/operator-guide.md)
 
 ## Evals
@@ -196,7 +215,8 @@ python tests/customer_eval.py --runtime claude-local --runs 4
 
 Runs the twenty requests, six adversarial messages, twelve multi-turn
 conversations and six safety cases, each in a fresh copy of the hub, and reports
-pass^1 to pass^4, following Sierra's tau-bench method.
+pass^1 to pass^4, following Sierra's tau-bench method. These run from the
+command line, not from the Quality tab.
 [Evals →](docs/evals.md)
 
 ## Go further

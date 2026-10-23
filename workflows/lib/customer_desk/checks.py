@@ -1,4 +1,4 @@
-"""The ten deterministic checks every reply revision runs (HUB-8 section 6.4),
+"""The ten deterministic checks every reply revision runs,
 plus non-blocking style notes.
 
 A model-written revision runs all ten. A person's edit runs checks 1, 2, 3,
@@ -29,12 +29,22 @@ def _fold(text: str) -> str:
 
 
 LIST_MARKER = re.compile(r"^\s*\d{1,2}[.)]\s", re.M)
+# Facts written as words: quantities from two up (not "one", which is also
+# ordinary English), relative dates, weekdays and months (not "May", a verb).
+NUMBER_WORDS = ("two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+                "seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred "
+                "thousand million billion dozen half").split()
+DATE_WORDS = ("today tonight tomorrow yesterday monday tuesday wednesday thursday friday saturday sunday january "
+              "february march april june july august september october november december").split()
+WORD_FACT = re.compile(r"\b(" + "|".join(NUMBER_WORDS + DATE_WORDS) + r")\b"
+                       r"|\b(?:next|this|last|coming)\s+(?:week|month|year|weekend)\b", re.I)
 
 
 def literal_values(text: str, id_patterns: list[str]) -> list[str]:
     """Anything in `text` that could be a fact: any number, even one digit
-    ("7 units", "2 days"), a currency symbol or code, or a document id. Only a
-    Markdown list marker at the start of a line is not a value."""
+    ("7 units", "2 days"), a number or date written as words ("seven days",
+    "tomorrow"), a currency symbol or code, or a document id. Only a Markdown
+    list marker at the start of a line is not a value."""
     text = LIST_MARKER.sub(" ", model_text(text or ""))
     found_ids = ids.find(text, id_patterns)
     rest = text
@@ -44,6 +54,7 @@ def literal_values(text: str, id_patterns: list[str]) -> list[str]:
     found += [ch for ch in rest if ch in CURRENCY_SYMBOLS]
     found += [w for w in re.findall(r"\b[A-Z]{3}\b", rest) if w in ISO_CURRENCIES]
     found += found_ids
+    found += [m.group(0) for m in WORD_FACT.finditer(rest)]
     out = []
     for f in found:
         if f not in out:

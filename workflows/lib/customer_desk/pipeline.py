@@ -604,11 +604,18 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
                                fact_sheet_digest=facts_lib.digest(sheet),
                                origin={"channel": c["channel_id"], "thread": c["thread_key"]})
             style_notes = checks.style_notes(best["rendered"], loaded.style)
+            # A model draft the reviewer did not pass never leaves the desk: no
+            # helpdesk draft, editor suggestion, mailbox draft or send until a
+            # person edits it (a person's edit is a new revision with its own checks).
+            held = best["author_kind"] == "model" and (review or {}).get("verdict") != "pass"
+            hold_findings = [f"{f.get('rule_ref')}: {f.get('problem')}" for f in (review or {}).get("findings") or []]
             store.save_reply(tconn, case_id, reply_rev, resolution=rev, author_kind=best["author_kind"], author="desk",
                              source_md=best["source"], rendered=best["rendered"], language=language,
                              recipients=recipients, subject=subject, attachments=att, digest=dg,
-                             checks={"results": best["checks"], "passed": best["passed"], "style": style_notes,
-                                     "fallback_reason": best.get("fallback_reason")},
+                             checks={"results": best["checks"], "passed": best["passed"] and not held,
+                                     "style": style_notes, "fallback_reason": best.get("fallback_reason"),
+                                     "review_hold": (hold_findings or ["The reviewer asked for changes."])
+                                     if held else None},
                              typed_values=best.get("typed_values") or [], state="ready",
                              station_label=runner.label)
             tconn.execute("UPDATE resolutions SET resolver=?, reviewer=?, review_rounds=? WHERE case_id=? AND revision=?",
@@ -616,11 +623,12 @@ def triage(hub_dir: Path, case_id: str, runner: Runner, *, trigger: str = "intak
             state = "in_review" if c.get("claimed_by") else "needs_owner"     # still held by its person
             store.update_case(tconn, case_id, state=state, queue=gathered["queue"], current_resolution=rev,
                               current_reply=reply_rev, policy_digest=loaded.policy.digest,
-                              note="; ".join(gathered["notes"]) or None)
+                              note="; ".join((["Reviewer asked for changes. Edit the reply before it can leave."]
+                                              if held else []) + gathered["notes"]) or None)
             store.audit(tconn, "desk", "case_triaged", case_id, {"resolution": rev, "reply": reply_rev,
                                                                  "queue": gathered["queue"]})
         return {"state": state, "case_id": case_id, "resolution": rev, "reply": reply_rev,
-                "queue": gathered["queue"], "digest": dg, "checks_passed": best["passed"],
+                "queue": gathered["queue"], "digest": dg, "checks_passed": best["passed"] and not held,
                 "review": (review or {}).get("verdict")}
 
     return runner.checkpoint(f"finalize-r{rev}", finalize_stage)

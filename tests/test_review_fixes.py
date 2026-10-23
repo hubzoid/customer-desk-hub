@@ -360,3 +360,117 @@ def test_dataset_subject_line_is_split_for_every_intake(bound):
     assert envelopes.split_subject("Subject: A\n\nB", "Given") == ("Given", "Subject: A\n\nB")
     case = envelopes.from_envelope(envelope(bound, "CD-011"))
     assert case["subject"] == "Statement please" and not case["text"].startswith("Subject:")
+
+
+def _doctor(hub):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("desk_doctor", hub / "doctor" / "checks.py")
+    checks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checks)
+    return checks
+
+
+def test_doctor_shows_a_real_mailbox_blocked_by_email_send(hub):
+    """A real mailbox also performs email.send, which work-items.yaml leaves off,
+    so approved replies would be refused. Doctor names the exact override."""
+    (hub / "work-items.yaml").write_text("version: 1\nwrite_modes:\n  customer_reply.send: approve\n")
+    out = _doctor(hub).write_modes({"hub_dir": hub, "settings": {"DESK_EXTERNAL_CHANNELS": ["support-email"]}})
+    assert out["status"] == "fail" and "support-email: {email.send: approve}" in out["summary"]
+    (hub / "work-items.yaml").write_text("version: 1\nwrite_modes:\n  customer_reply.send: approve\n"
+                                         "write_mode_overrides:\n  support-email:\n    email.send: approve\n")
+    out = _doctor(hub).write_modes({"hub_dir": hub, "settings": {"DESK_EXTERNAL_CHANNELS": ["support-email"]}})
+    assert out["status"] == "ok" and "support-email approve" in out["summary"]
+
+
+def test_a_reply_the_reviewer_did_not_pass_cannot_leave_the_desk(bound):
+    """Every round the reviewer says revise: the last draft is kept for a
+    person, flagged, and refused for drafts and sends until it is edited."""
+    class Strict(LocalRunner):
+        def station(self, agent, *, stage, revision, message):
+            if agent == "desk-reviewer":
+                return {"verdict": "revise", "findings": [{"rule_ref": "R3", "problem": "Too vague.",
+                                                           "suggestion": "Name the date."}],
+                        "unsupported_claims": []}
+            return super().station(agent, stage=stage, revision=revision, message=message)
+
+    opened, result, _ = triage_envelope(bound, _env(bound, "CD-001"), runner=Strict(bound))
+    case = store.get_case(store.connect(bound), opened["case_id"])
+    reply = store.get_reply(store.connect(bound), case["id"], case["current_reply"])
+    assert not reply["checks"]["passed"] and reply["checks"]["review_hold"] == ["R3: Too vague."]
+    assert result["checks_passed"] is False and case["note"].startswith("Reviewer asked for changes")
+    with pytest.raises(actions.ActionError) as exc:
+        actions._current_reply(bound, case, reply["revision"], reply["digest"])
+    assert exc.value.code == "review_hold"
+
+
+def test_a_decision_card_shown_before_a_new_customer_message_is_refused(bound, monkeypatch):
+    """The card names the case and the customer message the person saw. If the
+    customer writes again before the person confirms, the decision is refused."""
+    case, _ = _triaged(bound, "CD-020")
+    conn = store.connect(bound)
+    [d] = store.case_decisions(conn, case["id"])
+    seen = store.latest_customer_seq(conn, case["id"])
+    monkeypatch.setattr(actions, "rerun", lambda *a, **k: {"work_item_id": "w"})
+    lead = actions.Actor("lead@desk.example", lambda perm: perm == "desk_exceptions")
+    cases.intake(bound, envelopes.from_envelope(_env(bound, "CD-020", provider_event_id="CD-020-c",
+                                                     provider_message_id="<c20@synthetic>",
+                                                     text="Make it double the refund please.")))
+    with pytest.raises(actions.ActionError) as exc:
+        actions.decide_exception(bound, d["id"], lead, approve=False, note="Outside policy", start=None,
+                                 case_number=case["number"], seen_message=seen)
+    assert exc.value.code == "decision_stale"
+    with pytest.raises(actions.ActionError) as exc:
+        actions.decide_exception(bound, d["id"], lead, approve=False, note="Outside policy", start=None,
+                                 case_number="CD-999999", seen_message=seen + 1)
+    assert exc.value.code == "validation_failed"
+    out = actions.decide_exception(bound, d["id"], lead, approve=False, note="Outside policy", start=None,
+                                   case_number=case["number"], seen_message=seen + 1)
+    assert out["state"] == "declined"
+
+
+def test_report_cards_are_plain_text():
+    """The report card shows text, not Markdown: no emphasis marks, tables as
+    one line per row and no dollar escapes."""
+    md = ("Here is your statement.\n\n| Invoice | Due | Outstanding |\n|---|---|---|\n"
+          "| SINV-1 | 15 Jan 2000 | $1,250.00 |\n| SINV-2 | 20 Jan 2000 | $80.00 |\n\n**Thanks**")
+    plain = chat._plain(md)
+    assert "- Invoice: SINV-1, Due: 15 Jan 2000, Outstanding: $1,250.00" in plain
+    assert "|" not in plain and "**" not in plain and "Thanks" in plain
+    out = json.loads(chat._json({"kind": "report", "title": "t", "sections": [{"heading": "h", "markdown": "$5"}],
+                                 "sources": []}))
+    assert out["sections"][0]["markdown"] == "$5"
+
+
+@pytest.mark.parametrize("typed", ["within seven days", "twenty dollars", "it ships tomorrow",
+                                   "by Friday", "on 3 March", "next week"])
+def test_facts_written_as_words_must_be_placeholders(typed):
+    assert checks.literal_values(f"Your order arrives {typed}.", [])
+
+
+def test_ordinary_words_are_not_facts():
+    assert checks.literal_values("Thanks for your message. One of our team will reply. You may call us.", []) == []
+
+
+def test_a_case_page_is_republished_after_a_person_edits_the_reply(bound):
+    case, reply, owner = _ready(bound)
+    with store.tx(bound) as conn:            # as publish_case_page leaves it
+        current = store.get_case(conn, case["id"])
+        conn.execute("UPDATE cases SET page_url='https://hub.example/a/x', page_revision=? WHERE id=?",
+                     (current["revision"], case["id"]))
+    started = []
+    assert flows.refresh_changed_pages(bound, lambda *a, **k: started.append(k)) == 0
+    actions.edit_reply(bound, case["number"], owner, "Thanks for asking. Your order is on its way.")
+    assert flows.refresh_changed_pages(bound, lambda *a, **k: started.append(k)) == 1
+    assert started[0]["input"] == {"kind": "page", "case_id": case["id"]}
+
+
+def test_sample_reads_carry_the_dataset_date(bound):
+    """In sample mode the ERP reads are stamped with the dataset clock, so a
+    statement says the sample's date, not today's."""
+    case, _ = _triaged(bound, "CD-011")
+    conn = store.connect(bound)
+    facts = store.get_facts(conn, case["id"], case["current_resolution"])
+    assert facts and all(f["observed_at"].startswith("2000-") for f in facts)
+    reply = store.get_reply(conn, case["id"], case["current_reply"])
+    assert "2026" not in reply["rendered"] and "2000" in reply["rendered"]

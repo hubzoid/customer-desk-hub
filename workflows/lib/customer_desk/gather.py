@@ -1,4 +1,4 @@
-"""The category rules (HUB-8 section 6.3): for each classified request, read
+"""The category rules: for each classified request, read
 the bound customer's records, register the facts, and decide the outcome.
 
 This is deterministic code between the stations, as in Mastra's support

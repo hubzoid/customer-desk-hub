@@ -91,13 +91,22 @@ def queue(hub_dir: Path, *, tab: str = "all", viewer: str | None = None, limit: 
     for c in rows:
         reply = store.get_reply(conn, c["id"], c["current_reply"]) if c["current_reply"] else None
         age = _age_hours(c, dataset_clock=values.get("DESK_CLOCK") == "dataset")
+        held = bool(reply and (reply.get("checks") or {}).get("review_hold"))
+        state_text = ("Reviewer asked for changes" if held
+                      else STATE_TEXT.get(c["state"], c["state"]).split(". ")[0].rstrip("."))
         out.append({"case": c["number"], "customer": c["customer_id"] or "unbound", "channel": c["channel_id"] or c["surface"],
-                    "categories": ", ".join(_categories(conn, c)), "state": c["state"], "queue": c["queue"] or "",
+                    "categories": ", ".join(_categories(conn, c)), "state": c["state"], "state_text": state_text,
+                    "queue": c["queue"] or "",
+                    "review_hold": held,
                     "assignee": c["claimed_by"] or "", "first_line": (reply["rendered"].split("\n\n")[1][:90]
                                                                     if reply and "\n\n" in reply["rendered"] else ""),
                     "over_target": bool(age is not None and age > target and c["state"] not in ("resolved", "sent"))})
-    return {"tab": tab, "namespace": ns, "total": total, "rows": out, "next_offset": offset + len(out)
-            if offset + len(out) < total else None}
+    out.sort(key=lambda r: not r["review_hold"])        # what a person should look at first
+    counts = {r["queue"]: r["n"] for r in store.rows(conn.execute(
+        "SELECT queue, COUNT(*) AS n FROM cases WHERE namespace=? AND queue IS NOT NULL AND "
+        "state NOT IN ('resolved','cancelled','sent','failed') GROUP BY queue", (ns,)))}
+    return {"tab": tab, "namespace": ns, "total": total, "rows": out, "counts": counts,
+            "next_offset": offset + len(out) if offset + len(out) < total else None}
 
 
 def case(hub_dir: Path, ref: str) -> dict | None:
@@ -137,6 +146,8 @@ def compact(view: dict) -> dict:
         "sender": c["sender_key"] if c["state"] == "binding_required" else None,
         "messages": [{"seq": e["seq"], "at": e["received_at"], "from": e["author_kind"], "subject": e["subject"],
                       "text": e["text"][:2000]} for e in view["events"]],
+        "latest_customer_message": max((e["seq"] for e in view["events"] if e["author_kind"] == "customer"),
+                                       default=None),
         "plans": [{"version": p["version"], "digest": p["digest"], "state": p["state"], "author": p["author"],
                    "reviewer": p["reviewer"], "note": p["note"], "body": p["body"][:2000]}
                   for p in view.get("plans") or []],
