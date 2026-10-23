@@ -7,8 +7,8 @@ new copy replaces this folder and this file.
 | | |
 |---|---|
 | Canonical module | `hubzoid/order-desk-hub:erp/` |
-| Source commit | `765ce27bcacad66b04873c1b0d4b3f17d6cd08aa` |
-| Copied on | 21 Oct 2026 |
+| Source commit | `d7ba7fd9982bc6596908277dfd0f580113921d66` |
+| Copied on | 23 Oct 2026 |
 | Left out | `write.py`, `digest.py`, `bootstrap.py`: the write contract. The Customer Desk never writes to ERPNext and mounts no ERP write tool |
 
 The desk reaches this module only through `workflows/lib/customer_desk/erpnext/`,
@@ -30,7 +30,7 @@ Coordinated canonical update: `service.py` and `config.py` include the 20 Octobe
 | `cli.py` | `sha256:588b58e9eda9542ddee66dbfe35dcb0f7e575ffa5860c4e585c2349c2b13547a` |
 | `config.py` | `sha256:973f383d933e622128490d81ea850104effd50c213f859164ff2b826048c1529` |
 | `datasets/__init__.py` | `sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
-| `datasets/distributor-v1/README.md` | `sha256:55699122a9bd24dd44e9e7b4ed9cd6da9bc183e3daeffc255035e161ee772892` |
+| `datasets/distributor-v1/README.md` | `sha256:a3e4e7baf3af57acacfab45337955af5cf9d6a86119606eed4e110834f2c88e4` |
 | `datasets/distributor-v1/attachments/AH-3315.pdf` | `sha256:90ddf4a609481de7856c298f76ab391cd635604cc0b474436b5054b90c090881` |
 | `datasets/distributor-v1/attachments/GCS-3002.png` | `sha256:e0c557d259d694444b39066d463326568d865e54ac590bb270788245d96659c0` |
 | `datasets/distributor-v1/attachments/GCS-3003.pdf` | `sha256:fb50c595f23f481d9589ee7cc1f9351543e90438138ccde2eaca81ce663ac28e` |
@@ -58,7 +58,7 @@ Coordinated canonical update: `service.py` and `config.py` include the 20 Octobe
 | `datasets/distributor-v1/erp/uoms.json` | `sha256:f521b31202343a4c5642be4d851a1fee25fc62c6407f1e752c664bacf86f2f56` |
 | `datasets/distributor-v1/erp/warehouses.json` | `sha256:690938a0817cc24bcad1fa90185985b1d63ba07e1c08a4c92dcc1ec6c37519e0` |
 | `datasets/distributor-v1/expected/order-invoice-desk.json` | `sha256:2dfa2a4b95e006a08ad501e478418f878e8800293a04ed8941634f11284ad95d` |
-| `datasets/distributor-v1/manifest.json` | `sha256:089f2fe5e341b21636271ba4093fd4751bb2c1b412cd3821f5485e4cad23e77f` |
+| `datasets/distributor-v1/manifest.json` | `sha256:1ddd9a6f0513cbdfbd321fd14019104c9ab329a3554b899d2199333b2002d96f` |
 | `datasets/distributor-v1/messages/customer-desk-adversarial.jsonl` | `sha256:a1ce356a2c9b50a6f09b70d8d1a4dcd0273ddd5fd51efb8a11177aa938bf2012` |
 | `datasets/distributor-v1/messages/customer-desk.index.json` | `sha256:2d0c5a79870a058d52cef913e872a607b50e05b6f6f09e6f0e36325a28bd5a86` |
 | `datasets/distributor-v1/messages/customer-desk.jsonl` | `sha256:6ce021ea4211373a6a2ba1503f1c2b93f934ccd8c8b98f8bad4ec5ea29b68140` |
@@ -115,9 +115,9 @@ Coordinated canonical update: `service.py` and `config.py` include the 20 Octobe
 | `datasets/distributor-v1/raw/OID-A06.eml` | `sha256:f3d4cb549ff54ba87ffb1a560c88e32d503eadf88a7a4c4c791bdd757832b4d5` |
 | `datasets/distributor-v1/raw/OID-A07.eml` | `sha256:b68a7724e6bea7a835658cd00725d794b2af6383a2f05d95591fb10fb181914a` |
 | `datasets/distributor-v1/raw/OID-X01.eml` | `sha256:4312dca7d9ba27b02da093b7b4975812ad8604eef9916d602b685b00d12a6217` |
-| `datasets/generate.py` | `sha256:a13d4fbd60be3acf6ddc014388539a52d9bbadc1bf63fb0f73974e9234a79b2c` |
+| `datasets/generate.py` | `sha256:953b538bb3de8e1610a320f309558c46b17d06759a5b7a23394a0775eb63a359` |
 | `datasets/spec_distributor_v1.py` | `sha256:e2db1dc542ed08293ae8691ba00d57389caa7c4c0e58160e131471d6a06594f1` |
-| `doctor.py` | `sha256:63ad3196d76fc45a83b8f9b8b4d9124ea8873d1323e0f854527252b59b91f903` |
+| `doctor.py` | `sha256:82c0ad7b557eb8d6de7cd7879543c459d5adc39b0975b3fa7e221ff48af7dc65` |
 | `errors.py` | `sha256:224dcf48f48597dbf3e76ccebf5de3eab38a8afc4c5798954685fd13442a1bd1` |
 | `fake_server.py` | `sha256:b26345b16e29820e8abad14ea8064b81b550a2e47b1f7916cb0afe0afad1b2c4` |
 | `filters.py` | `sha256:fdfc65034cd6b27ef7c9eaec900f77159098c81d5e136e247b807dce1d8e569a` |
