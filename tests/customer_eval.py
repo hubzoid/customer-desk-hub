@@ -119,10 +119,10 @@ def make_hub(root: Path, runtime: str, write_mode: str | None) -> Path:
             shutil.copytree(src, hub / name, ignore=shutil.ignore_patterns("__pycache__"))
         elif src.exists():
             shutil.copy(src, hub / name)
-    if runtime == "codex-local":
-        for agent in (hub / "agents").glob("*/AGENTS.md"):
-            text = agent.read_text().replace("engine: claude-local", "engine: codex-local")
-            agent.write_text("\n".join(line for line in text.splitlines() if not line.startswith("model:")) + "\n")
+    if runtime != "scripted":
+        # Stations inherit the hub's runtime (MODEL), so the hub's .env and the
+        # engine's environment both name the one being measured.
+        (hub / ".env").write_text(f"MODEL={runtime}\n")
     if write_mode == "approve":
         (hub / "work-items.yaml").write_text("version: 1\nwrite_modes:\n  customer_reply.send: approve\n"
                                              "write_mode_overrides:\n  sample-whatsapp:\n    customer_reply.send: approve\n")
@@ -165,13 +165,21 @@ def run_case(case: dict, runtime: str, trial: int, keep: bool = False) -> dict:
     engine = None
     try:
         import_bindings(hub)
-        engine = Engine(hub, root, env={"DESK_SCRIPTED_STATIONS": "1" if runtime == "scripted" else ""})
+        engine = Engine(hub, root, env={"DESK_SCRIPTED_STATIONS": "1" if runtime == "scripted" else "",
+                                        **({"MODEL": runtime} if runtime != "scripted" else {})})
         state = {"case": None, "erp_edits": set(), "erp_before": erp_documents(hub)}
         for env in case.get("before") or []:
             do_envelope(hub, env, state)
         for n, step in enumerate(case["steps"], start=1):
             do_step(hub, case, n, step, state)
         result.update(grade(hub, case, state, before))
+        if runtime != "scripted":
+            used = station_runtimes(hub)
+            result["station_runtimes"] = used
+            wrong = sorted({r for r in used.values() if r != runtime})
+            if wrong:
+                result["passed"] = False
+                result["problems"].append(f"stations ran on {', '.join(wrong)}, not {runtime}")
     except Exception as exc:  # noqa: BLE001 - an infrastructure error fails the trial, visibly
         result["problems"].append(f"error: {type(exc).__name__}: {exc}")
         result["traceback"] = traceback.format_exc()[-2000:]
@@ -443,6 +451,20 @@ def station_calls(hub: Path) -> int:
 
     with stations._engine(hub).connect() as c:
         return c.execute(text("SELECT COUNT(*) FROM hz_station_calls")).scalar() or 0
+
+
+def station_runtimes(hub: Path) -> dict[str, str]:
+    """The runtime each station actually ran on, from the SDK's record of its calls."""
+    from sqlalchemy import text
+
+    from hubzoid.stations import service as stations
+
+    out = {}
+    with stations._engine(hub).connect() as c:
+        for agent, definition in c.execute(text("SELECT agent, definition_json FROM hz_station_calls")):
+            d = json.loads(definition or "{}")
+            out[agent] = d.get("engine") or d.get("model") or "unknown"
+    return out
 
 
 def outbox_problems(hub: Path, c: dict, outbox: list[dict]) -> list[str]:

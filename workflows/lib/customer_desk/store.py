@@ -160,7 +160,7 @@ def connect(hub_dir: Path) -> sqlite3.Connection:
 ADDED_COLUMNS = [("cases", "page_url", "TEXT"), ("replies", "station_label", "TEXT"), ("cases", "origin", "TEXT"),
                  ("case_events", "work_item_id", "TEXT"), ("cases", "page_readers", "TEXT"),
                  ("cases", "page_generation", "INTEGER NOT NULL DEFAULT 0"),
-                 ("editor_deliveries", "claim_hash", "TEXT")]
+                 ("editor_deliveries", "claim_hash", "TEXT"), ("cases", "page_revision", "INTEGER NOT NULL DEFAULT 0")]
 
 
 def migrate(conn: sqlite3.Connection) -> None:

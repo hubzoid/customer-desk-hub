@@ -201,6 +201,9 @@ def _current_reply(hub_dir: Path, case: dict, reply_revision: int, digest: str) 
     if digest != reply["digest"]:
         raise ActionError("reply_stale", "The digest does not match this reply. Reload the case.",
                           current_digest=reply["digest"])
+    if (reply["checks"] or {}).get("review_hold"):
+        raise ActionError("review_hold", f"The reviewer asked for changes to reply {reply_revision}: "
+                          + "; ".join(reply["checks"]["review_hold"]) + ". Edit the reply, then ask again.")
     if not (reply["checks"] or {}).get("passed"):
         failed = [c["id"] for c in reply["checks"]["results"] if c["status"] == "fail"]
         raise ActionError("checks_failed", f"Reply {reply_revision} failed checks: {', '.join(failed)}. Edit or rerun.")
@@ -446,11 +449,23 @@ def revoke_binding(hub_dir: Path, actor: Actor, binding_id: str) -> dict:
 
 # -- owner decisions ---------------------------------------------------------------------------
 
-def decide_exception(hub_dir: Path, decision_id: str, actor: Actor, *, approve: bool, note: str, start) -> dict:
+def decide_exception(hub_dir: Path, decision_id: str, actor: Actor, *, approve: bool, note: str, start,
+                     case_number: str | None = None, seen_message: int | None = None) -> dict:
+    """Record a person's decision. From a confirmation card, `case_number` and
+    `seen_message` (the customer's latest message when they looked) bind the
+    decision to what they saw: a newer customer message refuses it."""
     require(actor, "desk_exceptions")
     if not (note or "").strip():
         raise ActionError("validation_failed", "A decision needs a note saying why.", 422)
     with store.tx(hub_dir) as conn:
+        pending = store.get_decision(conn, decision_id)
+        if pending is not None and case_number is not None:
+            if store.get_case(conn, pending["case_id"])["number"] != case_number:
+                raise ActionError("validation_failed", f"Decision {decision_id} is not on {case_number}.", 422)
+        if pending is not None and seen_message is not None and \
+                store.latest_customer_seq(conn, pending["case_id"]) > int(seen_message):
+            raise ActionError("decision_stale", "The customer wrote again after this was shown. Read the new "
+                              "message on the case, then decide.")
         try:
             d = store.decide(conn, decision_id, state="approved" if approve else "declined", note=note.strip(),
                              by=actor.email)

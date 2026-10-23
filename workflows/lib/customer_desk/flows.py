@@ -264,8 +264,8 @@ def publish_case_page(hub_dir: Path, case_id: str) -> dict | None:
         with store.tx(hub_dir) as conn:
             # A global cursor let the first refreshed case hide the remaining
             # old ACLs. Each case now acknowledges its own reader snapshot.
-            conn.execute("UPDATE cases SET page_url=?, page_readers=?, page_generation=page_generation+1 WHERE id=?",
-                         (url, ",".join(readers), case_id))
+            conn.execute("UPDATE cases SET page_url=?, page_readers=?, page_generation=page_generation+1, "
+                         "page_revision=? WHERE id=?", (url, ",".join(readers), view["case"]["revision"], case_id))
     return page
 
 
@@ -318,6 +318,24 @@ def refresh_pages_if_readers_changed(hub_dir: Path, start, *, limit: int = 100) 
     for c in stale[:limit]:
         try:
             start("customer_desk_intake", key=f"page:{c['id']}:{c['page_generation']}:{tag}", route="triage",
+                  input={"kind": "page", "case_id": c["id"]}, requester="")
+            n += 1
+        except Exception:  # noqa: BLE001 - the next tick tries again
+            continue
+    return n
+
+
+def refresh_changed_pages(hub_dir: Path, start, *, limit: int = 50) -> int:
+    """Republish case pages whose case changed after the page was made: a
+    person's edit, a decision, a send that settled (run every minute by
+    desk_upkeep). The old copy stays readable until the new one replaces it."""
+    conn = store.connect(hub_dir)
+    rows = store.rows(conn.execute("SELECT id, revision FROM cases WHERE page_url IS NOT NULL AND "
+                                   "revision > page_revision ORDER BY updated LIMIT ?", (limit,)))
+    n = 0
+    for c in rows:
+        try:
+            start("customer_desk_intake", key=f"page:{c['id']}:r{c['revision']}", route="triage",
                   input={"kind": "page", "case_id": c["id"]}, requester="")
             n += 1
         except Exception:  # noqa: BLE001 - the next tick tries again

@@ -168,17 +168,27 @@ def write_modes(context):
     channels = list(context["settings"].get("DESK_EXTERNAL_CHANNELS") or [])
     if context["settings"].get("DESK_HELPDESK") in ("zoho_desk", "freshdesk"):
         channels.append(context["settings"]["DESK_HELPDESK"])
+    from customer_desk import replies
+
     problems, shown = [], []
     for ch in channels:
-        mode = wi_config.mode_for(cfg, ["customer_reply.send"], ch)
+        reply_mode = wi_config.mode_for(cfg, ["customer_reply.send"], ch)
+        # A real mailbox also performs email.send, and Hubzoid applies the
+        # stricter of the two: show the mode the desk will actually get.
+        email = ch not in replies.SAMPLE_CHANNELS and replies.channel_kind(ch) == "email"
+        mode = wi_config.mode_for(cfg, ["customer_reply.send", "email.send"], ch) if email else reply_mode
         shown.append(f"{ch} {mode}")
+        if email and mode != reply_mode:
+            problems.append(f"{ch} replies are {reply_mode}, but email.send is stricter, so they are {mode}. "
+                            f"Add under write_mode_overrides: {ch}: {{email.send: {reply_mode}}}")
         if "whatsapp" in ch and mode == "draft":
             problems.append(f"{ch} is in draft mode, but WhatsApp has no drafts")
         if ch in ("zoho_desk", "freshdesk") and mode == "approve":
             problems.append(f"{ch} is in approve mode, but the desk never sends from the helpdesk")
     if problems:
-        return _fail("; ".join(problems) + ".", "In work-items.yaml set WhatsApp channels to off or approve, and the "
-                     "helpdesk to off or draft, under write_mode_overrides.")
+        return _fail("; ".join(problems) + ".", "In work-items.yaml set WhatsApp channels to off or approve, the "
+                     "helpdesk to off or draft, and each real mailbox's email.send to match its replies, under "
+                     "write_mode_overrides.")
     return _ok("Replies: " + ", ".join(shown) + ". Nothing is sent without the requester's approval.")
 
 

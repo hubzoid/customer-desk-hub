@@ -154,9 +154,22 @@ async function insert() {
   el("confirm-warning").textContent = "Replace the reply editor text with this suggestion? Existing text, including a human draft, will be lost. Cancel to preserve it. Nothing will be sent." + attachmentWarning;
   el("confirm-panel").hidden = false;
 }
+// The reply's Markdown as editor HTML, as the desk writes Zoho drafts:
+// paragraphs, line breaks, bullet lists and tables (a statement), every value escaped.
 function draftHtml(body) {
-  const escaped = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-  return escaped.split(/\n\s*\n/).map(p => "<p>" + p.replace(/\n/g, "<br>") + "</p>").join("");
+  const esc = t => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  const rule = /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/;
+  return body.split(/\n\s*\n/).map(block => {
+    const lines = block.split("\n").map(l => l.replace(/\s+$/, "")).filter(l => l.trim());
+    if (!lines.length) return "";
+    if (lines.length >= 2 && lines.every(l => l.trim().startsWith("|"))) {
+      const rows = lines.filter(l => !rule.test(l.trim())).map(l => l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim()));
+      return "<table border='1' cellpadding='4' cellspacing='0'><tr>" + rows[0].map(c => "<th>" + esc(c) + "</th>").join("") + "</tr>"
+        + rows.slice(1).map(r => "<tr>" + r.map(c => "<td>" + esc(c) + "</td>").join("") + "</tr>").join("") + "</table>";
+    }
+    if (lines.every(l => /^\s*[-*] /.test(l))) return "<ul>" + lines.map(l => "<li>" + esc(l.trim().slice(2)) + "</li>").join("") + "</ul>";
+    return "<p>" + lines.map(esc).join("<br>") + "</p>";
+  }).join("");
 }
 async function confirmInsert() {
   const latest = pendingReplace;
