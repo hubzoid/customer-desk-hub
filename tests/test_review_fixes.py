@@ -463,3 +463,14 @@ def test_a_case_page_is_republished_after_a_person_edits_the_reply(bound):
     actions.edit_reply(bound, case["number"], owner, "Thanks for asking. Your order is on its way.")
     assert flows.refresh_changed_pages(bound, lambda *a, **k: started.append(k)) == 1
     assert started[0]["input"] == {"kind": "page", "case_id": case["id"]}
+
+
+def test_sample_reads_carry_the_dataset_date(bound):
+    """In sample mode the ERP reads are stamped with the dataset clock, so a
+    statement says the sample's date, not today's."""
+    case, _ = _triaged(bound, "CD-011")
+    conn = store.connect(bound)
+    facts = store.get_facts(conn, case["id"], case["current_resolution"])
+    assert facts and all(f["observed_at"].startswith("2000-") for f in facts)
+    reply = store.get_reply(conn, case["id"], case["current_reply"])
+    assert "2026" not in reply["rendered"] and "2000" in reply["rendered"]

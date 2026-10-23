@@ -95,8 +95,16 @@ def backend(hub_dir: Path, cfg: ConnectorConfig | None = None):
     """The desk's read client for the configuration in force."""
     from .adapter import DeskERP
 
+    from .. import config as desk_config
+
     cfg = cfg or load(hub_dir)
-    return DeskERP(service(hub_dir), cfg)
+    erp = DeskERP(service(hub_dir), cfg)
+    if cfg.backend == "sample" and desk_config.settings(hub_dir).get("DESK_CLOCK") == "dataset":
+        # The sample's records live in January 2000: stamp its reads with the
+        # desk's dataset clock, so facts, [[observed]] and edits agree. A real
+        # ERPNext always keeps the real read time.
+        erp.reader.clock = lambda: desk_config.now_iso(hub_dir)
+    return erp
 
 
 def dataset_dir(hub_dir: Path, dataset: str) -> Path:
