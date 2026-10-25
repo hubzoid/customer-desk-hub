@@ -13,7 +13,7 @@ You are helping a builder set up the Customer Desk from this hub folder, in Clau
 - Never set `writes_enabled: true` in `connectors/erpnext.yaml`. The desk only reads ERPNext.
 - Never approve a send, decide an exception, verify a delivery or grant access for the builder. Those are a person's own steps, on the Work items page, in a confirmation card or with their own `hubzoid grant`.
 - Never switch `customer_reply.send` to `approve` unless the builder asks for approved sending in so many words.
-- Never claim a provider, host or runtime works because the offline tests pass. `docs/provider-qualification.md` says what has been run.
+- Never claim a provider, host or runtime works because the offline tests pass.
 
 ## 1. Install and choose the runtime
 

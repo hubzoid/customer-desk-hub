@@ -222,7 +222,7 @@ def helpdesk(context):
         if missing or not s.get("FRESHDESK_API_BASE") or not s.get("FRESHDESK_GROUP_ID"):
             return _fail("Freshdesk needs API base, explicit group and credential reference.",
                          "Use the builder recipe and hubzoid secrets set. No secret values in chat.")
-        return _warn("Freshdesk configured. Editor app/linked agent required. Persistence remains unqualified until provider evidence.")
+        return _warn("Freshdesk configured. Editor app/linked agent required. Freshdesk cannot confirm a placed reply was saved: check the ticket before sending.")
     if s.get("DESK_HELPDESK") != "zoho_desk":
         return _ok("No helpdesk connected.")
     avail = context.get("available") or {}

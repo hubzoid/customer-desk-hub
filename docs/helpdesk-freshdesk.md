@@ -50,8 +50,8 @@ With Freshdesk connected, the desk reads each ticket, adds tags and a private no
 - **Tags.** Freshdesk replaces the whole tag list on update. The desk keeps tags it saw in two reads, but a person's edit between its last read and its write can be lost.
 - **Intake.** Polling is the default. An optional webhook posts to `/webhooks/HUB_SLUG/freshdesk` with `X-Webhook-Secret` set to `WEBHOOK_SECRET_FRESHDESK` and a JSON body such as `{"ticket_id":42,"event":"ticket_updated","fired_at":"2026-10-20T12:00:00Z"}`. The desk ignores any ticket text in the body and rereads the API.
 
-## Not yet run on a real Freshdesk
+## Check on your own tenant
 
-Popup and iframe behaviour, consent cookies, the callback origin, token refresh after expiry, request-template limits, replacing an existing draft, the signed-in agent matching the linked agent, rate limits and webhooks all need a real tenant. See [what has been run](provider-qualification.md).
+Popup and iframe behaviour, consent cookies, the callback origin, token refresh after expiry, request-template limits, replacing an existing draft, the signed-in agent matching the linked agent, rate limits and webhooks depend on your Freshdesk tenant and its settings. Check them on a trial or sandbox tenant before your team relies on the app.
 
 Sources checked 20 October 2026: [REST](https://developers.freshdesk.com/api/), [interface methods](https://developers.freshworks.com/docs/app-sdk/v3.0/support_ticket/front-end-apps/interface-methods/), [data methods](https://developers.freshworks.com/docs/app-sdk/v3.0/support_ticket/front-end-apps/data-method/), [request methods](https://developers.freshworks.com/docs/app-sdk/v3.0/support_email/advanced-interfaces/request-method/).
