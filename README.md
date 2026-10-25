@@ -47,13 +47,12 @@ Every case is a work item. A restart resumes it from its last saved step, and no
 
 You need Python 3.11 or 3.12, Git, and Claude Code or Codex signed in on this machine. No API key. The quick start uses the labelled sample, so you need no helpdesk and no ERP.
 
-Paste this into Claude Code or Codex from the cloned folder:
+Paste this into Claude Code or Codex:
 
 ```text
-Follow skills/setup-customer-desk/SKILL.md to set up the Customer Desk from this
-folder on the synthetic distributor. Install Hubzoid, run the hub doctor, load
-the twenty sample customer requests, and show me what the desk proposes for
-each and why. Stop before anything is sent.
+Clone https://github.com/hubzoid/customer-desk-hub into a folder called
+customer-desk, cd in, and follow skills/setup-customer-desk/SKILL.md to run the
+labelled sample. Stop before anything is sent.
 ```
 
 Or by hand:
@@ -69,11 +68,11 @@ export DESK_PYTHON="$PWD/.venv/bin/python"
 
 Keep the folder name lowercase. The desk runs on Claude Code by default. For Codex, set `MODEL=codex-local` in the hub's `.env`.
 
-Give yourself the desk roles with your own Hubzoid account, then check and start:
+Give yourself, the local owner `admin@localhost`, the desk roles, then check and start:
 
 ```bash
 for role in desk_operator desk_exceptions desk_delivery desk_complaints desk_bindings; do
-  python -m hubzoid grant you@company.example $role .
+  python -m hubzoid grant admin@localhost $role .
 done
 python -m hubzoid hub doctor .
 HUBZOID_SCHEDULES=1 python -m hubzoid run . --port 8721

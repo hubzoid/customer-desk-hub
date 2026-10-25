@@ -24,14 +24,14 @@ You are helping a builder set up the Customer Desk from this hub folder, in Clau
 ## 2. First result on the sample
 
 1. `python -m hubzoid hub doctor .` Every check passes except `desk-roles`, which warns until people hold the desk roles. Say "Sample mode. ERPNext backend sample, read only. Replies go to the sample outbox only."
-2. Give the builder the desk roles. They run it themselves, with their own Hubzoid account:
+2. Give the builder the desk roles. They run it themselves, with their own Hubzoid account (`admin@localhost` in local mode, with sign-in off):
 
    ```sh
-   python -m hubzoid grant you@company.example desk_operator .
-   python -m hubzoid grant you@company.example desk_exceptions .
-   python -m hubzoid grant you@company.example desk_delivery .
-   python -m hubzoid grant you@company.example desk_complaints .
-   python -m hubzoid grant you@company.example desk_bindings .
+   python -m hubzoid grant admin@localhost desk_operator .
+   python -m hubzoid grant admin@localhost desk_exceptions .
+   python -m hubzoid grant admin@localhost desk_delivery .
+   python -m hubzoid grant admin@localhost desk_complaints .
+   python -m hubzoid grant admin@localhost desk_bindings .
    ```
 
    Or in the web app: Settings, Agents, Customer Desk, Access, Restricted tools.
