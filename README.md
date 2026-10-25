@@ -29,16 +29,6 @@
 
 ## How it works
 
-- **Intake** makes one case per conversation and checks who is writing. A sender must resolve to exactly one customer before anything is read or any model runs.
-- **Classifier** sorts the request into the kinds your desk handles, with references and risk flags. When it is unsure, a second opinion from a different model decides whether a person should look.
-- **Gather** is code, not a model. It reads only that customer's own records, registers every value as a fact with its source, and decides each outcome from your policy.
-- **Resolver** words the reply from those facts. **Ten checks** run on every draft, and an independent **reviewer** checks every claim. At most two revisions. If no draft passes, the approved templates for the decided outcome are used.
-- **Ready** means waiting for a person: in the operators, delivery, complaints or decisions queue, and in your helpdesk as an unsent draft or a checked suggestion.
-
-Every case is a work item. A restart resumes it from its last saved step, and nothing finished runs again. [Architecture](ARCHITECTURE.md)
-
-## How work arrives
-
 | A customer asks | The desk does |
 |---|---|
 | A question your knowledge answers | Prepares the reply from your approved support articles, citing each source. |
@@ -49,7 +39,9 @@ Every case is a work item. A restart resumes it from its last saved step, and no
 | A delivery date change | Checks the notice period and proposes the change to the delivery team. It confirms only after ERPNext shows the new date. |
 | A complaint or refund | Opens a ticket. A refund outside your policy waits for a named person to decide. |
 
-Requests come from Zoho Desk, Freshdesk, a support mailbox or a WhatsApp Business number. Your team works the cases in the web chat. Every case shows its facts with the record and field they came from, the policy rules it used, its checks and the reviewer's verdict.
+Behind each reply: intake checks the sender belongs to exactly one customer, a **classifier** sorts the request, code gathers that customer's own records as facts with their sources, a **resolver** words the reply, **ten checks** and an independent **reviewer** test every claim, and a person decides. Every case shows its facts with the record and field they came from, the policy rules it used, its checks and the reviewer's verdict.
+
+Every case is a work item. A restart resumes it from its last saved step, and nothing finished runs again. [Architecture](ARCHITECTURE.md)
 
 ## Quick start
 
@@ -104,20 +96,18 @@ You see six order status answers, including a late order with a delivery ticket,
 
 `./desk sample load --adversarial` adds six harder messages: an unknown sender, another customer's invoice, two attempts to give the desk instructions, a statement since 1990 and a resent question. The [setup skill](skills/setup-customer-desk/SKILL.md) holds the same steps for your coding assistant. [Full setup](docs/setup-support.md)
 
-## Connect your own helpdesk
+## Integrations
 
-1. **Preview the configuration.** Run the setup script for your helpdesk, review the diff, then repeat with `--apply`:
+| Works with | What the desk does |
+|---|---|
+| Zoho Desk | Tags the ticket, adds a private note with the facts and their sources, and leaves the reply as an unsent draft after reading it back. [Zoho Desk](docs/helpdesk-zoho.md) |
+| Freshdesk | Writes tags and source evidence to the ticket. The checked reply appears in the Customer Desk app inside the ticket, and the agent inserts it with one explicit confirmation. [Freshdesk](docs/helpdesk-freshdesk.md) |
+| ERPNext, read only | Answers order, invoice, statement, price and delivery questions from your own records. [ERP permissions](docs/erp-permissions.md) |
+| A support mailbox or WhatsApp Business | Takes requests from `channels/support-email.yaml.example` and `channels/support-whatsapp.yaml.example`. Add each channel id to `DESK_EXTERNAL_CHANNELS`. |
 
-   ```bash
-   python scripts/setup_support.py --provider freshdesk --company 'Your Company' \
-     --department 123 --api-base https://company.freshdesk.com/api/v2
-   ```
+Your team sends the reply in the helpdesk. The desk never sends, closes or assigns a ticket.
 
-   Zoho uses `--provider zoho_desk` and its regional API base.
-2. **Store the credentials and add your knowledge.** Store the helpdesk credentials yourself with `python -m hubzoid secrets set . --name NAME --stdin`, never in chat. Add your approved articles under `knowledge/support/`.
-3. **Run it on one real ticket.** `./desk ticket TICKET_ID`, then `./desk list`. The first runs are dry runs: the desk records exactly what it would write. When you are ready, set `DESK_HELPDESK_MODE: live` and `DESK_HELPDESK_DRAFTS: true`.
-
-In **Zoho Desk**, the desk tags the ticket, adds a private note with the facts and their sources, and leaves the reply as an unsent draft after reading it back. In **Freshdesk**, tags and source evidence are written to the ticket, and the checked reply appears in the Customer Desk app inside the ticket. Install the app from `freshdesk-app/` and link each agent. [Zoho Desk](docs/helpdesk-zoho.md) · [Freshdesk](docs/helpdesk-freshdesk.md)
+Ready for your own helpdesk? Ask your coding assistant to follow the [setup skill](skills/setup-customer-desk/SKILL.md), or the [setup guide](docs/setup-support.md) by hand. You store the helpdesk credentials yourself, never in chat. The first runs are dry runs: the desk records exactly what it would write until you set `DESK_HELPDESK_MODE: live` and `DESK_HELPDESK_DRAFTS: true`.
 
 ## Make it yours
 
