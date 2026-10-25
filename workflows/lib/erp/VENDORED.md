@@ -7,8 +7,8 @@ new copy replaces this folder and this file.
 | | |
 |---|---|
 | Canonical module | `hubzoid/order-desk-hub:erp/` |
-| Source commit | `d7ba7fd9982bc6596908277dfd0f580113921d66` |
-| Copied on | 23 Oct 2026 |
+| Source commit | `7069a179da0eda412fb43226888cd83e183f71f6` |
+| Copied on | 25 Oct 2026 |
 | Left out | `write.py`, `digest.py`, `bootstrap.py`: the write contract. The Customer Desk never writes to ERPNext and mounts no ERP write tool |
 
 The desk reaches this module only through `workflows/lib/customer_desk/erpnext/`,
@@ -117,7 +117,7 @@ Coordinated canonical update: `service.py` and `config.py` include the 20 Octobe
 | `datasets/distributor-v1/raw/OID-X01.eml` | `sha256:4312dca7d9ba27b02da093b7b4975812ad8604eef9916d602b685b00d12a6217` |
 | `datasets/generate.py` | `sha256:953b538bb3de8e1610a320f309558c46b17d06759a5b7a23394a0775eb63a359` |
 | `datasets/spec_distributor_v1.py` | `sha256:e2db1dc542ed08293ae8691ba00d57389caa7c4c0e58160e131471d6a06594f1` |
-| `doctor.py` | `sha256:82c0ad7b557eb8d6de7cd7879543c459d5adc39b0975b3fa7e221ff48af7dc65` |
+| `doctor.py` | `sha256:0e6f7f8f3b56a816511bcae888adb742700c1d18c0d80c8d3a806c0a9dae5514` |
 | `errors.py` | `sha256:224dcf48f48597dbf3e76ccebf5de3eab38a8afc4c5798954685fd13442a1bd1` |
 | `fake_server.py` | `sha256:b26345b16e29820e8abad14ea8064b81b550a2e47b1f7916cb0afe0afad1b2c4` |
 | `filters.py` | `sha256:fdfc65034cd6b27ef7c9eaec900f77159098c81d5e136e247b807dce1d8e569a` |

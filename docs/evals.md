@@ -45,3 +45,12 @@ Each case runs four times. For a case with c passes out of n trials, pass^k is c
 They show that the desk reaches the right state on these synthetic cases, consistently, with the installed model. They do not measure reply quality on your data, your customers' wording, or your ERPNext. Run them again after changing the policy, the style or a station, and add cases for the requests your team sees. The method follows Sierra's tau-bench (MIT). No tau-bench code or tasks are used.
 
 `--runtime scripted` replaces the stations with keyword stand-ins. It checks the plumbing, the rules and the write boundaries in seconds, and is never evidence of model behaviour.
+
+## Offline checks
+
+Scripted stations, a fake mailbox and local fake Zoho and Freshdesk servers, with no model or network. One process at a time:
+
+```sh
+python -m pytest -q
+node tests/freshdesk_app_harness.cjs
+```
